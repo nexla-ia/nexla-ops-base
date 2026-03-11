@@ -3283,7 +3283,7 @@ export default function CompanyDashboard() {
                                   <span
                                     className="text-[11px] font-semibold"
                                     style={{
-                                      color: isSentMessage ? (settings.messageBubbleSentTextColor ? 'rgba(255,255,255,0.6)' : '#9ed8c9') : '#00a884'
+                                      color: isSentMessage ? '#9ed8c9' : '#00a884'
                                     }}
                                   >
                                     {senderLabel}
@@ -3356,8 +3356,8 @@ export default function CompanyDashboard() {
                                         className="flex items-center gap-3 p-3 rounded-xl"
                                         style={{
                                           backgroundColor: isSentMessage
-                                            ? (settings.messageBubbleSentColor || '#005c4b')
-                                            : (settings.messageBubbleReceivedColor || '#ffffff')
+                                            ? '#005c4b'
+                                            : '#ffffff'
                                         }}
                                       >
                                         <button
@@ -3374,7 +3374,7 @@ export default function CompanyDashboard() {
                                           <p className="text-sm font-medium">
                                             {msg.message || 'Áudio'}
                                           </p>
-                                          <p className="text-[11px]" style={{ opacity: 0.7 }}>
+                                          <p className={`text-[11px] ${isSentMessage ? 'text-blue-100' : 'text-gray-500'}`}>
                                             Clique para {playingAudio === msg.id ? 'pausar' : 'reproduzir'}
                                           </p>
                                         </div>
@@ -3391,15 +3391,15 @@ export default function CompanyDashboard() {
                                     <div className="p-2">
                                       <button
                                         onClick={() => downloadBase64File(msg.base64!, msg.message || 'documento.pdf')}
-                                        className="flex items-center gap-2 p-2.5 rounded-xl w-full transition"
-                                        style={{ backgroundColor: isSentMessage ? (settings.messageBubbleSentColor || '#005c4b') : '#f1f5f9', color: isSentMessage ? (settings.messageBubbleSentTextColor || '#fff') : '#111b21' }}
+                                        className={`flex items-center gap-2 p-2.5 rounded-xl w-full ${isSentMessage ? 'bg-blue-600 hover:bg-blue-700' : 'bg-gray-50 hover:bg-gray-100'
+                                          } transition`}
                                       >
                                         <FileText className="w-8 h-8 flex-shrink-0" />
                                         <div className="flex-1 min-w-0 text-left">
                                           <p className="text-sm font-medium truncate">
                                             {msg.message || 'Documento'}
                                           </p>
-                                          <p className="text-[11px]" style={{ opacity: 0.7 }}>
+                                          <p className={`text-[11px] ${isSentMessage ? 'text-blue-100' : 'text-gray-500'}`}>
                                             Clique para baixar
                                           </p>
                                         </div>
@@ -3414,8 +3414,8 @@ export default function CompanyDashboard() {
                                       href={msg.urlpdf}
                                       target="_blank"
                                       rel="noopener noreferrer"
-                                      className="flex items-center gap-2 p-2.5 rounded-xl hover:opacity-90 transition"
-                                      style={{ backgroundColor: isSentMessage ? (settings.messageBubbleSentColor || '#005c4b') : '#f1f5f9', color: isSentMessage ? (settings.messageBubbleSentTextColor || '#fff') : '#111b21' }}
+                                      className={`flex items-center gap-2 p-2.5 rounded-xl ${isSentMessage ? 'bg-blue-600' : 'bg-gray-50'
+                                        } hover:opacity-90 transition`}
                                     >
                                       <FileText className="w-8 h-8 flex-shrink-0" />
                                       <div className="flex-1 min-w-0">
@@ -3439,7 +3439,7 @@ export default function CompanyDashboard() {
                                 )}
 
                                 <div className="px-3.5 pb-1.5 flex items-center justify-end gap-1">
-                                  <span style={{ color: isSentMessage ? (settings.messageBubbleSentTextColor ? 'rgba(255,255,255,0.55)' : 'rgba(233,245,239,0.65)') : '#667781', fontSize: '11px' }}>
+                                  <span style={{ color: isSentMessage ? 'rgba(233,245,239,0.65)' : '#667781', fontSize: '11px' }}>
                                     {formatTime(msg)}
                                   </span>
                                   {isSentMessage && (
