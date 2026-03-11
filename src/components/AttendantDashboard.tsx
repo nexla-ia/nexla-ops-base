@@ -116,7 +116,7 @@ function getAvatarColor(input: string): string {
 
 export default function AttendantDashboard() {
   const { attendant, company, signOut } = useAuth();
-  const { settings, loadCompanyTheme } = useTheme();
+  const { settings } = useTheme();
   const aiEnabled = useAiEnabled(company?.id || null);
   const [currentView, setCurrentView] = useState<'mensagens' | 'contatos' | 'transferencias' | 'historico' | 'configuracoes'>('mensagens');
   const [messages, setMessages] = useState<Message[]>([]);
@@ -375,14 +375,19 @@ export default function AttendantDashboard() {
   };
 
   const getMessageTimestamp = (msg: any): number => {
-    if (msg.timestamp && !isNaN(Number(msg.timestamp))) {
-      return Number(msg.timestamp) * 1000;
-    }
     if (msg.date_time) {
-      return new Date(msg.date_time).getTime();
+      const t = new Date(msg.date_time).getTime();
+      if (!isNaN(t) && t > 0) return t;
+    }
+    if (msg.timestamp) {
+      const ts = Number(msg.timestamp);
+      if (!isNaN(ts) && ts > 0) {
+        return ts < 9_999_999_999 ? ts * 1000 : ts;
+      }
     }
     if (msg.created_at) {
-      return new Date(msg.created_at).getTime();
+      const t = new Date(msg.created_at).getTime();
+      if (!isNaN(t)) return t;
     }
     return 0;
   };
@@ -412,7 +417,7 @@ export default function AttendantDashboard() {
     }
   };
 
-  const fetchMessages = useCallback(async () => {
+  const fetchMessages = useCallback(async (retryCount = 0) => {
     if (!attendant?.api_key) {
       setLoading(false);
       return;
@@ -423,31 +428,48 @@ export default function AttendantDashboard() {
     const timeout = setTimeout(() => {
       setLoading(false);
       // Silenciosamente timeout, sem mostrar erro no front
-    }, 10000);
+    }, 15000);
 
     try {
       // Usar api_key do attendant para buscar mensagens da empresa
       const messagesQuery = supabase
         .from('messages')
         .select('*')
-        .eq('apikey_instancia', attendant.api_key);
+        .eq('apikey_instancia', attendant.api_key)
+        .order('created_at', { ascending: false })
+        .limit(150);
 
       const sentMessagesQuery = supabase
         .from('sent_messages')
         .select('*')
-        .eq('apikey_instancia', attendant.api_key);
+        .eq('apikey_instancia', attendant.api_key)
+        .order('created_at', { ascending: false })
+        .limit(150);
 
       const [receivedResult, sentResult] = await Promise.all([messagesQuery, sentMessagesQuery]);
 
       clearTimeout(timeout);
 
       if (receivedResult.error) {
+        // Se for erro de rede (Failed to fetch), tenta novamente até 2x
+        if (receivedResult.error.message?.includes('Failed to fetch') && retryCount < 2) {
+          console.warn(`⚠️ Tentativa ${retryCount + 1} falhou, tentando novamente...`);
+          setTimeout(() => fetchMessages(retryCount + 1), 2000 * (retryCount + 1));
+          return;
+        }
         setError(`Erro ao carregar mensagens recebidas: ${receivedResult.error.message}`);
+        setLoading(false);
         return;
       }
 
       if (sentResult.error) {
+        if (sentResult.error.message?.includes('Failed to fetch') && retryCount < 2) {
+          console.warn(`⚠️ Tentativa ${retryCount + 1} falhou, tentando novamente...`);
+          setTimeout(() => fetchMessages(retryCount + 1), 2000 * (retryCount + 1));
+          return;
+        }
         setError(`Erro ao carregar mensagens enviadas: ${sentResult.error.message}`);
+        setLoading(false);
         return;
       }
 
@@ -467,8 +489,14 @@ export default function AttendantDashboard() {
       setMessages(messagesWithReactions);
       setLoading(false);
     } catch (error: any) {
-      console.error('Erro inesperado:', error);
       clearTimeout(timeout);
+      // Retry automático para erros de rede
+      if (error?.message?.includes('Failed to fetch') && retryCount < 2) {
+        console.warn(`⚠️ Erro de rede, tentativa ${retryCount + 1}/2 em ${(retryCount + 1) * 2}s...`);
+        setTimeout(() => fetchMessages(retryCount + 1), 2000 * (retryCount + 1));
+        return;
+      }
+      console.error('Erro inesperado:', error);
       setError(`Erro inesperado: ${error.message}`);
       setLoading(false);
     }
@@ -593,11 +621,7 @@ export default function AttendantDashboard() {
     return () => window.removeEventListener('contactDeleted', handler as EventListener);
   }, [selectedContact]);
 
-  useEffect(() => {
-    if (attendant?.company_id) {
-      loadCompanyTheme(attendant.company_id);
-    }
-  }, [attendant?.company_id, loadCompanyTheme]);
+
 
   useEffect(() => {
     fetchMessages();
@@ -608,22 +632,19 @@ export default function AttendantDashboard() {
   }, [attendant?.company_id, fetchMessages]);
 
   // Realtime para mensagens
+  const handleRealtimeMessage = useCallback((message: Message) => {
+    setMessages((prevMessages) => {
+      const exists = prevMessages.some((m) => m.id === message.id || m.idmessage === message.idmessage);
+      if (exists) return prevMessages;
+      const updated = [...prevMessages, message].sort((a, b) => getMessageTimestamp(a) - getMessageTimestamp(b));
+      return processReactions(updated);
+    });
+  }, []);
+
   useRealtimeMessages({
     apiKey: attendant?.api_key,
     enabled: true,
-    onMessagesChange: (message: Message) => {
-      // Atualizar apenas a lista de mensagens
-      setMessages((prevMessages) => {
-        const exists = prevMessages.some((m) => m.id === message.id || m.idmessage === message.idmessage);
-        if (exists) return prevMessages;
-
-        const updated = [...prevMessages, message].sort((a, b) => {
-          return getMessageTimestamp(a) - getMessageTimestamp(b);
-        });
-
-        return processReactions(updated);
-      });
-    },
+    onMessagesChange: handleRealtimeMessage,
   });
 
   // Realtime para contatos
@@ -663,23 +684,7 @@ export default function AttendantDashboard() {
     }
   });
 
-  // Polling
-  useEffect(() => {
-    if (!attendant?.api_key) return;
-
-    console.log('⏱️ Iniciando polling de mensagens a cada 3 segundos');
-
-    const pollingInterval = setInterval(() => {
-      console.log('🔄 Verificando novas mensagens...');
-      fetchMessages();
-      fetchContacts();
-    }, 3000); // 3 segundos
-
-    return () => {
-      clearInterval(pollingInterval);
-      console.log('⏹️ Parando polling de mensagens');
-    };
-  }, [attendant?.api_key, fetchMessages]);
+  // Realtime via useRealtimeMessages e useRealtimeContacts (sem polling)
 
   const getContactId = (msg: Message): string => {
     return normalizePhone(msg.numero || msg.phone_number || msg.sender || msg.number || '');
@@ -1704,7 +1709,7 @@ export default function AttendantDashboard() {
                   <div className="flex items-center justify-between">
                     <div>
                       <h2 className="text-2xl font-bold text-slate-900 tracking-tight">Contatos</h2>
-                      <p className="text-sm text-slate-500 mt-0.5">
+                      <p className="text-sm text-slate-400 mt-0.5">
                         {loadingAllContacts ? 'Carregando...' : `${totalContatos} contato${totalContatos !== 1 ? 's' : ''} cadastrado${totalContatos !== 1 ? 's' : ''}`}
                       </p>
                     </div>
@@ -2304,15 +2309,15 @@ export default function AttendantDashboard() {
         </div>
 
         {/* Chat Area */}
-        <div className="flex-1 flex flex-col bg-white">
+        <div className="flex-1 flex flex-col" style={{ backgroundColor: settings.backgroundColor || "#efeae2" }}>
           {selectedContactData ? (
             <>
               {/* Chat Header */}
-              <div className="bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between shadow-sm">
+              <div className="border-b px-6 py-4 flex items-center justify-between" style={{ backgroundColor: "#1a1f2e", borderColor: "#252b3b" }}>
                 <div className="flex items-center gap-4">
                   <button
                     onClick={() => setSidebarOpen(true)}
-                    className="md:hidden p-2 text-slate-600 hover:bg-slate-100 rounded-lg"
+                    className="md:hidden p-2 text-slate-300 hover:bg-white/10 rounded-lg"
                   >
                     <Menu className="w-5 h-5" />
                   </button>
@@ -2320,7 +2325,7 @@ export default function AttendantDashboard() {
                     {selectedContactData.name ? selectedContactData.name[0].toUpperCase() : <User className="w-5 h-5" />}
                   </div>
                   <div>
-                    <h2 className="font-semibold text-slate-900">
+                    <h2 className="font-semibold text-white">
                       {selectedContactData.name || getPhoneNumber(selectedContactData.phoneNumber)}
                     </h2>
                     <p className="text-sm text-slate-500 mt-0.5">
@@ -2439,12 +2444,12 @@ export default function AttendantDashboard() {
                         <div
                           className={`max-w-[70%] ${isSent ? 'rounded-2xl rounded-br-[5px]' : 'rounded-2xl rounded-bl-[5px]'}`}
                           style={isSent ? {
-                            backgroundColor: 'var(--color-outgoing-bg, #005c4b)',
-                            color: 'var(--color-outgoing-text, #e9f5ef)',
+                            backgroundColor: settings.messageBubbleSentColor || '#005c4b',
+                            color: settings.messageBubbleSentTextColor || '#e9f5ef',
                             boxShadow: '0 1px 2px rgba(0,0,0,0.2)'
                           } : {
-                            backgroundColor: 'var(--color-incoming-bg, #ffffff)',
-                            color: 'var(--color-incoming-text, #111b21)',
+                            backgroundColor: settings.messageBubbleReceivedColor || '#ffffff',
+                            color: settings.messageBubbleReceivedTextColor || '#111b21',
                             boxShadow: '0 1px 2px rgba(0,0,0,0.13)'
                           }}
                         >
@@ -2453,7 +2458,7 @@ export default function AttendantDashboard() {
                             <span
                               className="text-[11px] font-semibold"
                               style={{
-                                color: isSent ? '#9ed8c9' : '#00a884'
+                                color: isSent ? (settings.messageBubbleSentTextColor ? 'rgba(255,255,255,0.6)' : '#9ed8c9') : '#00a884'
                               }}
                             >
                               {isSent ? (attendant?.name || 'Atendente') : (selectedContactData.name || selectedContactData.phoneNumber)}
@@ -2531,8 +2536,8 @@ export default function AttendantDashboard() {
                                   className="flex items-center gap-3 p-3 rounded-xl"
                                   style={{
                                     backgroundColor: isSent
-                                      ? 'var(--color-outgoing-bg, #3b82f6)'
-                                      : 'var(--color-incoming-bg, #f1f5f9)'
+                                      ? (settings.messageBubbleSentColor || '#005c4b')
+                                      : (settings.messageBubbleReceivedColor || '#f1f5f9')
                                   }}
                                 >
                                   <button
@@ -2567,14 +2572,15 @@ export default function AttendantDashboard() {
                               <div className="p-2">
                                 <button
                                   onClick={() => downloadBase64File(msg.base64!, msg.message || 'documento.pdf')}
-                                  className={`flex items-center gap-2 p-2.5 rounded-xl w-full ${isSent ? 'bg-blue-600 hover:bg-blue-700' : 'bg-gray-50 hover:bg-gray-100'} transition`}
+                                  className="flex items-center gap-2 p-2.5 rounded-xl w-full transition"
+                                  style={{ backgroundColor: isSent ? (settings.messageBubbleSentColor || '#005c4b') : '#f1f5f9', color: isSent ? (settings.messageBubbleSentTextColor || '#fff') : '#111b21' }}
                                 >
                                   <FileText className="w-8 h-8 flex-shrink-0" />
                                   <div className="flex-1 min-w-0 text-left">
                                     <p className="text-sm font-medium truncate">
                                       {msg.message || 'Documento'}
                                     </p>
-                                    <p className={`text-[11px] ${isSent ? 'text-blue-100' : 'text-gray-500'}`}>
+                                    <p className="text-[11px]" style={{ opacity: 0.7 }}>
                                       Clique para baixar
                                     </p>
                                   </div>
@@ -2590,14 +2596,15 @@ export default function AttendantDashboard() {
                                 href={msg.urlpdf}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className={`flex items-center gap-2 p-2.5 rounded-xl ${isSent ? 'bg-blue-600' : 'bg-gray-50'} hover:opacity-90 transition`}
+                                className="flex items-center gap-2 p-2.5 rounded-xl hover:opacity-90 transition"
+                                style={{ backgroundColor: isSent ? (settings.messageBubbleSentColor || '#005c4b') : '#f1f5f9', color: isSent ? (settings.messageBubbleSentTextColor || '#fff') : '#111b21' }}
                               >
                                 <FileText className="w-8 h-8 flex-shrink-0" />
                                 <div className="flex-1 min-w-0">
                                   <p className="text-sm font-medium truncate">
                                     {msg.message || 'Documento'}
                                   </p>
-                                  <p className={`text-[11px] ${isSent ? 'text-blue-100' : 'text-gray-500'}`}>
+                                  <p className="text-[11px]" style={{ opacity: 0.7 }}>
                                     Clique para abrir
                                   </p>
                                 </div>
@@ -2616,7 +2623,7 @@ export default function AttendantDashboard() {
 
                           {/* Footer com hora e check */}
                           <div className="px-3.5 pb-1.5 flex items-center justify-end gap-1">
-                            <span style={{ color: isSent ? 'rgba(233,245,239,0.65)' : '#667781', fontSize: '11px' }}>
+                            <span style={{ color: isSent ? (settings.messageBubbleSentTextColor ? 'rgba(255,255,255,0.55)' : 'rgba(233,245,239,0.65)') : '#667781', fontSize: '11px' }}>
                               {formatTime(msg.date_time || msg.created_at || '')}
                             </span>
                             {isSent && (
@@ -2675,7 +2682,7 @@ export default function AttendantDashboard() {
 
               {/* File Preview */}
               {filePreview && (
-                <div className="bg-gradient-to-r from-slate-50 to-blue-50/30 dark:from-black dark:to-black border-t border-slate-200/80 dark:border-slate-700/80 p-4 animate-in slide-in-from-bottom duration-200">
+                <div className="border-t p-4 animate-in slide-in-from-bottom duration-200" style={{ backgroundColor: "#1a1f2e", borderColor: "#252b3b" }}>
                   <div className="max-w-[200px] relative">
                     <button
                       onClick={() => {
@@ -2707,15 +2714,15 @@ export default function AttendantDashboard() {
               )}
 
               {/* Message Input ou Botão Assumir Conversa */}
-              <div className="bg-white/95 backdrop-blur-sm border-t border-slate-200/80 p-4 shadow-lg">
+              <div className="border-t p-4" style={{ backgroundColor: "#1a1f2e", borderColor: "#252b3b" }}>
                 {contactFilter === 'todos' && !isContactFromMyDepartment ? (
                   // Mostrar botão para assumir conversa
                   <div className="flex flex-col items-center gap-3 py-4">
                     <div className="text-center">
-                      <p className="text-sm text-slate-600 mb-2">
+                      <p className="text-sm text-slate-300 mb-2">
                         Este contato pertence a outro departamento
                       </p>
-                      <p className="text-xs text-slate-500">
+                      <p className="text-xs text-slate-400">
                         Assuma a conversa para poder enviar mensagens
                       </p>
                     </div>
@@ -2746,14 +2753,14 @@ export default function AttendantDashboard() {
                     />
                     <button
                       onClick={() => fileInputRef.current?.click()}
-                      className="p-2.5 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all duration-200 hover:scale-110"
+                      className="p-2.5 text-slate-400 hover:text-blue-400 hover:bg-white/10 rounded-lg transition-all duration-200 hover:scale-110"
                       title="Anexar arquivo"
                     >
                       <Paperclip className="w-5 h-5" />
                     </button>
                     <button
                       onClick={() => imageInputRef.current?.click()}
-                      className="p-2.5 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all duration-200 hover:scale-110"
+                      className="p-2.5 text-slate-400 hover:text-blue-400 hover:bg-white/10 rounded-lg transition-all duration-200 hover:scale-110"
                       title="Enviar imagem"
                     >
                     <ImageIcon className="w-5 h-5" />
@@ -2771,7 +2778,7 @@ export default function AttendantDashboard() {
                         }
                       }}
                       placeholder="Digite uma mensagem..."
-                      className="w-full px-4 py-3 pr-12 border border-slate-300 rounded-lg focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 focus:shadow-md resize-none min-h-[48px] max-h-[120px] transition-all duration-200"
+                      className="w-full px-4 py-3 pr-12 border rounded-lg focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/30 resize-none min-h-[48px] max-h-[120px] transition-all duration-200 text-white placeholder-slate-400 bg-[#252b3b] border-[#313a4f]"
                       rows={1}
                     />
                     <div className="absolute right-2 bottom-2">
@@ -2798,8 +2805,8 @@ export default function AttendantDashboard() {
               </div>
             </>
           ) : (
-            <div className="flex-1 flex items-center justify-center bg-slate-50">
-              <div className="text-center text-slate-500">
+            <div className="flex-1 flex items-center justify-center" style={{ backgroundColor: "#1a1f2e" }}>
+              <div className="text-center text-slate-400">
                 <MessageSquare className="w-24 h-24 mx-auto mb-4 text-slate-300" />
                 <p className="text-lg font-medium text-slate-600">Selecione um contato para começar</p>
               </div>
@@ -2808,10 +2815,10 @@ export default function AttendantDashboard() {
         </div>
           </>
         ) : (
-          <div className="flex-1 flex items-center justify-center bg-slate-50">
+          <div className="flex-1 flex items-center justify-center" style={{ backgroundColor: "#1a1f2e" }}>
             <div className="text-center">
-              <Settings className="w-24 h-24 mx-auto mb-4 text-slate-300" />
-              <p className="text-lg font-medium text-slate-600">Configurações em desenvolvimento</p>
+              <Settings className="w-24 h-24 mx-auto mb-4 text-slate-600" />
+              <p className="text-lg font-medium text-slate-400">Configurações em desenvolvimento</p>
             </div>
           </div>
         )}

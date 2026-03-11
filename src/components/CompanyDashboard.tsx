@@ -140,7 +140,7 @@ type TabType = 'mensagens' | 'departamentos' | 'setores' | 'atendentes' | 'tags'
 
 export default function CompanyDashboard() {
   const { company, signOut } = useAuth();
-  const { settings, loadCompanyTheme } = useTheme();
+  const { settings } = useTheme();
   const aiEnabled = useAiEnabled(company?.id || null);
   const [activeTab, setActiveTab] = useState<TabType>('mensagens');
   const [messages, setMessages] = useState<Message[]>([]);
@@ -261,11 +261,7 @@ export default function CompanyDashboard() {
 
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
 
-  useEffect(() => {
-    if (company?.id) {
-      loadCompanyTheme(company.id);
-    }
-  }, [company?.id, loadCompanyTheme]);
+
 
   // ✅ Ao abrir o modal de transferência, se o contato não tiver departamento, já seleciona a Recepção
   useEffect(() => {
@@ -508,14 +504,22 @@ export default function CompanyDashboard() {
   };
 
   const getMessageTimestamp = (msg: any): number => {
-    if (msg.timestamp && !isNaN(Number(msg.timestamp))) {
-      return Number(msg.timestamp) * 1000;
-    }
+    // date_time é o mais confiável (ISO string salvo no banco)
     if (msg.date_time) {
-      return new Date(msg.date_time).getTime();
+      const t = new Date(msg.date_time).getTime();
+      if (!isNaN(t) && t > 0) return t;
+    }
+    // timestamp unix (segundos) vindo do WhatsApp
+    if (msg.timestamp) {
+      const ts = Number(msg.timestamp);
+      if (!isNaN(ts) && ts > 0) {
+        // Se for unix epoch em segundos (< 9999999999), multiplica por 1000
+        return ts < 9_999_999_999 ? ts * 1000 : ts;
+      }
     }
     if (msg.created_at) {
-      return new Date(msg.created_at).getTime();
+      const t = new Date(msg.created_at).getTime();
+      if (!isNaN(t)) return t;
     }
     return 0;
   };
@@ -556,7 +560,10 @@ export default function CompanyDashboard() {
     const timeout = setTimeout(() => {
       setLoading(false);
       // Silenciosamente timeout, sem mostrar erro no front
-    }, 10000);
+    }, 15000);
+
+    // Sempre usar limit para evitar statement timeout no banco
+    const effectiveLimit = limit || 150;
 
     try {
       // Incluir fallback por company_id caso mensagens não possuam apikey_instancia
@@ -568,10 +575,8 @@ export default function CompanyDashboard() {
         ? supabase.from('sent_messages').select('*').or(`apikey_instancia.eq.${company.api_key},company_id.eq.${company.id}`)
         : supabase.from('sent_messages').select('*').eq('apikey_instancia', company.api_key);
 
-      if (limit) {
-        messagesQuery = messagesQuery.order('created_at', { ascending: false }).limit(limit);
-        sentMessagesQuery = sentMessagesQuery.order('created_at', { ascending: false }).limit(limit);
-      }
+      messagesQuery = messagesQuery.order('created_at', { ascending: false }).limit(effectiveLimit);
+      sentMessagesQuery = sentMessagesQuery.order('created_at', { ascending: false }).limit(effectiveLimit);
 
       const [receivedResult, sentResult] = await Promise.all([messagesQuery, sentMessagesQuery]);
 
@@ -1567,29 +1572,30 @@ export default function CompanyDashboard() {
 
   // Hook para monitorar mudanças em tempo real nas mensagens
   // Hook para monitorar mudanças em tempo real nas mensagens
+  const handleRealtimeMessage = useCallback((message: Message) => {
+    setMessages((prevMessages) => {
+      const messageExists = prevMessages.some(m => m.id === message.id || m.idmessage === message.idmessage);
+      if (messageExists) {
+        return prevMessages.map(m => m.id === message.id ? message : m);
+      }
+      return [...prevMessages, message].sort((a, b) => getMessageTimestamp(a) - getMessageTimestamp(b));
+    });
+  }, []);
+
+  const handleNewMessage = useCallback((message: Message, type: 'received' | 'sent') => {
+    console.log(`📨 Nova mensagem ${type}:`, message);
+    if (isUserScrollingRef.current) {
+      setPendingMessagesCount(prev => prev + 1);
+    } else {
+      scrollToBottom();
+    }
+  }, []);
+
   useRealtimeMessages({
     apiKey: company?.api_key,
-    enabled: activeTab === 'mensagens',
-    onMessagesChange: (message: Message) => {
-      // Atualizar apenas a lista de mensagens
-      setMessages((prevMessages) => {
-        const messageExists = prevMessages.some(m => m.id === message.id);
-        if (messageExists) {
-          return prevMessages.map(m => m.id === message.id ? message : m);
-        }
-        return [...prevMessages, message].sort((a, b) => getMessageTimestamp(a) - getMessageTimestamp(b));
-      });
-    },
-    onNewMessage: (message: Message, type: 'received' | 'sent') => {
-      console.log(`📨 Nova mensagem ${type}:`, message);
-
-      // Scroll automático apenas (sem fetchContacts para não alterar nomes)
-      if (isUserScrollingRef.current) {
-        setPendingMessagesCount(prev => prev + 1);
-      } else {
-        scrollToBottom();
-      }
-    }
+    enabled: true,
+    onMessagesChange: handleRealtimeMessage,
+    onNewMessage: handleNewMessage,
   });
 
   // Hook para monitorar mudanças em tempo real nos contatos
@@ -2200,103 +2206,98 @@ export default function CompanyDashboard() {
     if (!company || !selectedContact) return;
 
     setSending(true);
-    try {
-      const generatedIdMessage = `${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
-      const { data: existingMessages } = await supabase
-        .from('messages')
-        .select('instancia, department_id, sector_id, tag_id')
-        .eq('numero', selectedContact)
-        .eq('apikey_instancia', company.api_key)
-        .order('date_time', { ascending: false })
-        .limit(1);
+    const generatedIdMessage = `${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const attendantName = company.name;
+    const rawMessage = messageData.message || '';
+    const rawCaption = messageData.caption || null;
 
-      const instanciaValue = existingMessages?.[0]?.instancia || company.name;
-      const departmentId = existingMessages?.[0]?.department_id || null;
-      const sectorId = existingMessages?.[0]?.sector_id || null;
-      const tagId = existingMessages?.[0]?.tag_id || null;
+    // ── 1. Buscar instancia/dept/setor do histórico (usa cache local se disponível)
+    const existingMsg = messages
+      .filter(m => m.numero === selectedContact || m.sender === selectedContact)
+      .sort((a, b) => new Date(b.date_time || 0).getTime() - new Date(a.date_time || 0).getTime())[0];
 
-      // ✅ Envio pelo painel da empresa: NÃO prefixar texto.
-      // Envie apenas o conteúdo puro e deixe a padronização para o n8n.
-      const attendantName = company.name;
-      const rawMessage = messageData.message || '';
-      const rawCaption = messageData.caption || null;
+    const instanciaValue = existingMsg?.instancia || company.name;
+    const departmentId = existingMsg?.department_id || null;
+    const sectorId = existingMsg?.sector_id || null;
+    const tagId = existingMsg?.tag_id || null;
 
-      const { phone_number: _ph, ...messageDataClean } = messageData as Message & { phone_number?: string };
-      const newMessage = {
-        numero: selectedContact,
-        sender: null,
-        'minha?': 'true',
-        pushname: attendantName,
-        apikey_instancia: company.api_key,
-        date_time: new Date().toISOString(),
-        instancia: instanciaValue,
-        idmessage: generatedIdMessage,
-        company_id: company.id,
-        department_id: departmentId,
-        sector_id: sectorId,
-        tag_id: tagId,
-        ...messageDataClean,
-        message: rawMessage,
-        caption: rawCaption,
-      };
+    const { phone_number: _ph, ...messageDataClean } = messageData as Message & { phone_number?: string };
+    const newMessage = {
+      numero: selectedContact,
+      sender: null,
+      'minha?': 'true',
+      pushname: attendantName,
+      apikey_instancia: company.api_key,
+      date_time: new Date().toISOString(),
+      instancia: instanciaValue,
+      idmessage: generatedIdMessage,
+      company_id: company.id,
+      department_id: departmentId,
+      sector_id: sectorId,
+      tag_id: tagId,
+      ...messageDataClean,
+      message: rawMessage,
+      caption: rawCaption,
+    };
 
-      // salva no sent_messages (porque é "minha? true")
-      const { error: insertErr } = await supabase.from('sent_messages').insert([newMessage]);
+    // ── 2. Atualiza UI imediatamente (sem esperar Supabase/n8n)
+    setMessages(prev => [...prev, newMessage as Message]);
+    setMessageText('');
+    setImageCaption('');
+    setSelectedFile(null);
+    setFilePreview(null);
+    setTimeout(scrollToBottom, 100);
+    setSending(false);
+
+    // ── 3. Persiste no Supabase em background (não bloqueia UI)
+    supabase.from('sent_messages').insert([newMessage]).then(({ error: insertErr }) => {
       if (insertErr) console.error('Erro ao salvar sent_messages:', insertErr);
+    });
 
+    // ── 4. Dispara webhook n8n em background (não bloqueia UI)
+    const deptName = departments.find(d => d.id === departmentId)?.name || 'Recepção';
+    const sectorName = sectors.find(s => s.id === sectorId)?.name || 'Recepção';
 
-      try {
-        const timestamp = new Date().toISOString();
+    const webhookPayload = {
+      numero: selectedContact,
+      message: rawMessage,
+      tipomessage: messageData.tipomessage || 'conversation',
+      base64: messageData.base64 || null,
+      urlimagem: messageData.urlimagem || null,
+      urlpdf: messageData.urlpdf || null,
+      caption: rawCaption,
+      idmessage: generatedIdMessage,
+      pushname: company.name,
+      department_name: deptName,
+      sector_name: sectorName,
+      timestamp: new Date().toISOString(),
+      instancia: instanciaValue,
+      apikey_instancia: company.api_key,
+    };
 
-        // Buscar nomes reais de dept/setor
-        const deptName = departments.find(d => d.id === departmentId)?.name || 'Recepção';
-        const sectorName = sectors.find(s => s.id === sectorId)?.name || 'Recepção';
+    const webhookController = new AbortController();
+    const webhookTimeout = setTimeout(() => webhookController.abort(), 10000);
 
-        const webhookPayload = {
-          numero: selectedContact,
-          message: messageData.message || '',
-          tipomessage: messageData.tipomessage || 'conversation',
-          base64: messageData.base64 || null,
-          urlimagem: messageData.urlimagem || null,
-          urlpdf: messageData.urlpdf || null,
-          caption: messageData.caption || null,
-          idmessage: generatedIdMessage,
-          pushname: company.name,
-
-          // ✅ Usando valores reais do dept/setor
-          department_name: deptName,
-          sector_name: sectorName,
-
-          timestamp: new Date().toISOString(),
-          instancia: instanciaValue,
-          apikey_instancia: company.api_key,
-        };
-
-
-        const webhookResponse = await fetch('https://n8n.nexladesenvolvimento.com.br/webhook/EnvioMensagemOPS', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(webhookPayload),
-        });
-
-        if (!webhookResponse.ok) {
-          console.error('Erro ao enviar para webhook:', webhookResponse.status);
+    fetch('https://n8n.nexladesenvolvimento.com.br/webhook/EnvioMensagemOPS', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(webhookPayload),
+      signal: webhookController.signal,
+    })
+      .then(res => {
+        clearTimeout(webhookTimeout);
+        if (!res.ok) console.error('Erro ao enviar para webhook:', res.status);
+        else console.log('✅ Webhook n8n enviado com sucesso');
+      })
+      .catch((webhookError: any) => {
+        clearTimeout(webhookTimeout);
+        if (webhookError?.name === 'AbortError') {
+          console.warn('⚠️ Webhook n8n timeout (10s) — mensagem salva, envio pode ter atrasado.');
+        } else {
+          console.error('Erro ao chamar webhook:', webhookError);
         }
-      } catch (webhookError) {
-        console.error('Erro ao chamar webhook:', webhookError);
-      }
-
-      setMessageText('');
-      setTimeout(scrollToBottom, 100);
-    } catch (err) {
-      console.error('Erro ao enviar mensagem:', err);
-      alert('Erro ao enviar mensagem');
-    } finally {
-      setSending(false);
-    }
+      });
   };
 
   const handleContextMenu = (e: React.MouseEvent, phoneNumber: string) => {
@@ -3200,8 +3201,8 @@ export default function CompanyDashboard() {
                 ref={messagesContainerRef}
                 onScroll={handleMessagesScroll}
                 style={{
-                  backgroundColor: '#efeae2',
-                  backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100' height='100'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E")`,
+                  backgroundColor: settings.backgroundColor || '#efeae2',
+                  backgroundImage: settings.backgroundColor ? 'none' : `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100' height='100'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E")`,
                 }}
               >
                 <div className="w-full">
@@ -3268,12 +3269,12 @@ export default function CompanyDashboard() {
                               <div
                                 className={`max-w-[68%] rounded-2xl ${isSentMessage ? 'rounded-br-[5px]' : 'rounded-bl-[5px]'}`}
                                 style={isSentMessage ? {
-                                  backgroundColor: '#005c4b',
-                                  color: '#e9f5ef',
+                                  backgroundColor: settings.messageBubbleSentColor || '#005c4b',
+                                  color: settings.messageBubbleSentTextColor || '#e9f5ef',
                                   boxShadow: '0 1px 2px rgba(0,0,0,0.2)'
                                 } : {
-                                  backgroundColor: '#ffffff',
-                                  color: '#111b21',
+                                  backgroundColor: settings.messageBubbleReceivedColor || '#ffffff',
+                                  color: settings.messageBubbleReceivedTextColor || '#111b21',
                                   boxShadow: '0 1px 2px rgba(0,0,0,0.13)'
                                 }}
                               >
@@ -3282,7 +3283,7 @@ export default function CompanyDashboard() {
                                   <span
                                     className="text-[11px] font-semibold"
                                     style={{
-                                      color: isSentMessage ? '#9ed8c9' : '#00a884'
+                                      color: isSentMessage ? (settings.messageBubbleSentTextColor ? 'rgba(255,255,255,0.6)' : '#9ed8c9') : '#00a884'
                                     }}
                                   >
                                     {senderLabel}
@@ -3355,8 +3356,8 @@ export default function CompanyDashboard() {
                                         className="flex items-center gap-3 p-3 rounded-xl"
                                         style={{
                                           backgroundColor: isSentMessage
-                                            ? '#005c4b'
-                                            : '#ffffff'
+                                            ? (settings.messageBubbleSentColor || '#005c4b')
+                                            : (settings.messageBubbleReceivedColor || '#ffffff')
                                         }}
                                       >
                                         <button
@@ -3373,7 +3374,7 @@ export default function CompanyDashboard() {
                                           <p className="text-sm font-medium">
                                             {msg.message || 'Áudio'}
                                           </p>
-                                          <p className={`text-[11px] ${isSentMessage ? 'text-blue-100' : 'text-gray-500'}`}>
+                                          <p className="text-[11px]" style={{ opacity: 0.7 }}>
                                             Clique para {playingAudio === msg.id ? 'pausar' : 'reproduzir'}
                                           </p>
                                         </div>
@@ -3390,15 +3391,15 @@ export default function CompanyDashboard() {
                                     <div className="p-2">
                                       <button
                                         onClick={() => downloadBase64File(msg.base64!, msg.message || 'documento.pdf')}
-                                        className={`flex items-center gap-2 p-2.5 rounded-xl w-full ${isSentMessage ? 'bg-blue-600 hover:bg-blue-700' : 'bg-gray-50 hover:bg-gray-100'
-                                          } transition`}
+                                        className="flex items-center gap-2 p-2.5 rounded-xl w-full transition"
+                                        style={{ backgroundColor: isSentMessage ? (settings.messageBubbleSentColor || '#005c4b') : '#f1f5f9', color: isSentMessage ? (settings.messageBubbleSentTextColor || '#fff') : '#111b21' }}
                                       >
                                         <FileText className="w-8 h-8 flex-shrink-0" />
                                         <div className="flex-1 min-w-0 text-left">
                                           <p className="text-sm font-medium truncate">
                                             {msg.message || 'Documento'}
                                           </p>
-                                          <p className={`text-[11px] ${isSentMessage ? 'text-blue-100' : 'text-gray-500'}`}>
+                                          <p className="text-[11px]" style={{ opacity: 0.7 }}>
                                             Clique para baixar
                                           </p>
                                         </div>
@@ -3413,8 +3414,8 @@ export default function CompanyDashboard() {
                                       href={msg.urlpdf}
                                       target="_blank"
                                       rel="noopener noreferrer"
-                                      className={`flex items-center gap-2 p-2.5 rounded-xl ${isSentMessage ? 'bg-blue-600' : 'bg-gray-50'
-                                        } hover:opacity-90 transition`}
+                                      className="flex items-center gap-2 p-2.5 rounded-xl hover:opacity-90 transition"
+                                      style={{ backgroundColor: isSentMessage ? (settings.messageBubbleSentColor || '#005c4b') : '#f1f5f9', color: isSentMessage ? (settings.messageBubbleSentTextColor || '#fff') : '#111b21' }}
                                     >
                                       <FileText className="w-8 h-8 flex-shrink-0" />
                                       <div className="flex-1 min-w-0">
@@ -3438,7 +3439,7 @@ export default function CompanyDashboard() {
                                 )}
 
                                 <div className="px-3.5 pb-1.5 flex items-center justify-end gap-1">
-                                  <span style={{ color: isSentMessage ? 'rgba(233,245,239,0.65)' : '#667781', fontSize: '11px' }}>
+                                  <span style={{ color: isSentMessage ? (settings.messageBubbleSentTextColor ? 'rgba(255,255,255,0.55)' : 'rgba(233,245,239,0.65)') : '#667781', fontSize: '11px' }}>
                                     {formatTime(msg)}
                                   </span>
                                   {isSentMessage && (

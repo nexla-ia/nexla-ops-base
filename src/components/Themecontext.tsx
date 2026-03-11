@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback, useRef, ReactNode } from 'react';
 import { supabase } from '../lib/supabase';
 
 interface ThemeSettings {
@@ -20,24 +20,14 @@ interface ThemeContextType {
   loadCompanyTheme: (companyId: string) => Promise<void>;
 }
 
-// Valores antigos ruins que devem ser substituídos pelos novos defaults
-const STALE_BG_COLORS = new Set(['#f8fafc', '#ffffff', '#f1f5f9', '#f0f2f5', '']);
-const STALE_SENT_COLORS = new Set(['#3b82f6', '#2563eb', '']);
-const STALE_RECV_COLORS = new Set(['#ffffff', '#f1f5f9', '']);
-
-function sanitizeColor(value: string | null | undefined, staleSet: Set<string>, fallback: string): string {
-  if (!value || staleSet.has(value)) return fallback;
-  return value;
-}
-
 const defaultSettings: ThemeSettings = {
   companyName: '',
   logoUrl: '',
-  backgroundColor: '#d4dcd1',
-  messageBubbleSentColor: '#005c4b',
-  messageBubbleSentTextColor: '#e9f5f2',
-  messageBubbleReceivedColor: '#f0f4f0',
-  messageBubbleReceivedTextColor: '#111b21',
+  backgroundColor: '#f8fafc',
+  messageBubbleSentColor: '#3b82f6',
+  messageBubbleSentTextColor: '#ffffff',
+  messageBubbleReceivedColor: '#ffffff',
+  messageBubbleReceivedTextColor: '#1e293b',
   primaryColor: '#3b82f6',
 };
 
@@ -83,7 +73,28 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const loadCompanyTheme = async (id: string) => {
+  // Ref para evitar múltiplos canais realtime abertos
+  const themeChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+  const loadedCompanyIdRef = useRef<string | null>(null);
+
+  const applyThemeData = useCallback((themeData: any) => {
+    setSettings({
+      companyName: themeData.company_name || defaultSettings.companyName,
+      logoUrl: themeData.logo_primary_url || defaultSettings.logoUrl,
+      backgroundColor: themeData.background_color || defaultSettings.backgroundColor,
+      messageBubbleSentColor: themeData.message_bubble_sent_color || defaultSettings.messageBubbleSentColor,
+      messageBubbleSentTextColor: themeData.message_bubble_sent_text_color || defaultSettings.messageBubbleSentTextColor,
+      messageBubbleReceivedColor: themeData.message_bubble_received_color || defaultSettings.messageBubbleReceivedColor,
+      messageBubbleReceivedTextColor: themeData.message_bubble_received_text_color || defaultSettings.messageBubbleReceivedTextColor,
+      primaryColor: themeData.primary_color || defaultSettings.primaryColor,
+    });
+  }, []);
+
+  const loadCompanyTheme = useCallback(async (id: string) => {
+    // Evita recarregar se já foi carregado para o mesmo ID
+    if (loadedCompanyIdRef.current === id) return;
+    loadedCompanyIdRef.current = id;
+
     try {
       setCompanyId(id);
 
@@ -98,18 +109,14 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
       }
 
       if (themeData) {
-        setSettings({
-          companyName: themeData.company_name || defaultSettings.companyName,
-          logoUrl: themeData.logo_primary_url || defaultSettings.logoUrl,
-          backgroundColor: sanitizeColor(themeData.background_color, STALE_BG_COLORS, defaultSettings.backgroundColor),
-          messageBubbleSentColor: sanitizeColor(themeData.message_bubble_sent_color, STALE_SENT_COLORS, defaultSettings.messageBubbleSentColor),
-          messageBubbleSentTextColor: themeData.message_bubble_sent_text_color || defaultSettings.messageBubbleSentTextColor,
-          messageBubbleReceivedColor: sanitizeColor(themeData.message_bubble_received_color, STALE_RECV_COLORS, defaultSettings.messageBubbleReceivedColor),
-          messageBubbleReceivedTextColor: themeData.message_bubble_received_text_color || defaultSettings.messageBubbleReceivedTextColor,
-          primaryColor: themeData.primary_color || defaultSettings.primaryColor,
-        });
+        applyThemeData(themeData);
       } else {
         setSettings(defaultSettings);
+      }
+
+      // Remove canal anterior antes de criar novo
+      if (themeChannelRef.current) {
+        supabase.removeChannel(themeChannelRef.current);
       }
 
       const channel = supabase
@@ -124,17 +131,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
           },
           (payload) => {
             if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
-              const themeData = payload.new;
-              setSettings({
-                companyName: themeData.company_name || defaultSettings.companyName,
-                logoUrl: themeData.logo_primary_url || defaultSettings.logoUrl,
-                backgroundColor: sanitizeColor(themeData.background_color, STALE_BG_COLORS, defaultSettings.backgroundColor),
-                messageBubbleSentColor: sanitizeColor(themeData.message_bubble_sent_color, STALE_SENT_COLORS, defaultSettings.messageBubbleSentColor),
-                messageBubbleSentTextColor: themeData.message_bubble_sent_text_color || defaultSettings.messageBubbleSentTextColor,
-                messageBubbleReceivedColor: sanitizeColor(themeData.message_bubble_received_color, STALE_RECV_COLORS, defaultSettings.messageBubbleReceivedColor),
-                messageBubbleReceivedTextColor: themeData.message_bubble_received_text_color || defaultSettings.messageBubbleReceivedTextColor,
-                primaryColor: themeData.primary_color || defaultSettings.primaryColor,
-              });
+              applyThemeData(payload.new);
             } else if (payload.eventType === 'DELETE') {
               setSettings(defaultSettings);
             }
@@ -142,11 +139,13 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
         )
         .subscribe();
 
+      themeChannelRef.current = channel;
       console.log('Theme loaded successfully');
     } catch (error) {
       console.error('Error loading company theme:', error);
+      loadedCompanyIdRef.current = null; // permite retry em caso de erro real
     }
-  };
+  }, [applyThemeData]);
 
   const updateSettings = async (newSettings: Partial<ThemeSettings>) => {
     const merged = { ...settings, ...newSettings };

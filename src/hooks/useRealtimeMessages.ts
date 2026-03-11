@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useCallback } from 'react';
 import { supabase, Message } from '../lib/supabase';
 import { RealtimePostgresChangesPayload } from '@supabase/supabase-js';
 
@@ -21,17 +21,31 @@ export const useRealtimeMessages = ({
 }: UseRealtimeMessagesProps) => {
   const channelsRef = useRef<any[]>([]);
 
+  // Refs para callbacks — evita recriar canais quando funções mudam
+  const onMessagesChangeRef = useRef(onMessagesChange);
+  const onNewMessageRef = useRef(onNewMessage);
+  useEffect(() => { onMessagesChangeRef.current = onMessagesChange; }, [onMessagesChange]);
+  useEffect(() => { onNewMessageRef.current = onNewMessage; }, [onNewMessage]);
+
   useEffect(() => {
     if (!apiKey || !enabled) {
-      console.log('⏸️ Monitoramento desativado. apiKey:', apiKey, 'enabled:', enabled);
       return;
     }
 
+    // Usa nome de canal estável (sem Date.now) para evitar duplicação
+    const messagesChannelName = `messages-realtime-${apiKey}`;
+    const sentChannelName = `sent-messages-realtime-${apiKey}`;
+
+    // Remove canais anteriores se existirem
+    channelsRef.current.forEach(ch => {
+      try { supabase.removeChannel(ch); } catch (_) {}
+    });
+    channelsRef.current = [];
+
     console.log('📡 Iniciando monitoramento em tempo real para mensagens com apiKey:', apiKey);
 
-    // Canal para mensagens recebidas (messages table)
     const messagesChannel = supabase
-      .channel(`messages-${apiKey}-${Date.now()}`)
+      .channel(messagesChannelName)
       .on(
         'postgres_changes',
         {
@@ -41,27 +55,18 @@ export const useRealtimeMessages = ({
           filter: `apikey_instancia=eq.${apiKey}`
         },
         (payload: RealtimePostgresChangesPayload<Message>) => {
-          console.log('📨 NOVA mensagem recebida detectada:', payload);
+          console.log('📨 Nova mensagem recebida:', payload.new);
           const message = payload.new as Message;
-          
-          if (onNewMessage) {
-            console.log('🔔 Chamando onNewMessage para mensagem recebida');
-            onNewMessage(message, 'received');
-          }
-          
-          if (onMessagesChange) {
-            console.log('🔄 Chamando onMessagesChange para mensagem recebida');
-            onMessagesChange(message);
-          }
+          onNewMessageRef.current?.(message, 'received');
+          onMessagesChangeRef.current?.(message);
         }
       )
       .subscribe((status) => {
-        console.log('📨 Status subscription mensagens recebidas (messages):', status);
+        console.log('📨 Status mensagens recebidas:', status);
       });
 
-    // Canal para mensagens enviadas (sent_messages table)
     const sentMessagesChannel = supabase
-      .channel(`sent-messages-${apiKey}-${Date.now()}`)
+      .channel(sentChannelName)
       .on(
         'postgres_changes',
         {
@@ -71,33 +76,25 @@ export const useRealtimeMessages = ({
           filter: `apikey_instancia=eq.${apiKey}`
         },
         (payload: RealtimePostgresChangesPayload<Message>) => {
-          console.log('📤 NOVA mensagem enviada detectada:', payload);
+          console.log('📤 Nova mensagem enviada:', payload.new);
           const message = payload.new as Message;
-          
-          if (onNewMessage) {
-            console.log('🔔 Chamando onNewMessage para mensagem enviada');
-            onNewMessage(message, 'sent');
-          }
-          
-          if (onMessagesChange) {
-            console.log('🔄 Chamando onMessagesChange para mensagem enviada');
-            onMessagesChange(message);
-          }
+          onNewMessageRef.current?.(message, 'sent');
+          onMessagesChangeRef.current?.(message);
         }
       )
       .subscribe((status) => {
-        console.log('📤 Status subscription mensagens enviadas (sent_messages):', status);
+        console.log('📤 Status mensagens enviadas:', status);
       });
 
     channelsRef.current = [messagesChannel, sentMessagesChannel];
 
-    // Cleanup
     return () => {
       console.log('🛑 Parando monitoramento de mensagens para apiKey:', apiKey);
-      messagesChannel.unsubscribe();
-      sentMessagesChannel.unsubscribe();
+      try { supabase.removeChannel(messagesChannel); } catch (_) {}
+      try { supabase.removeChannel(sentMessagesChannel); } catch (_) {}
+      channelsRef.current = [];
     };
-  }, [apiKey, enabled, onMessagesChange, onNewMessage]);
+  }, [apiKey, enabled]); // ← só recriar canal se apiKey ou enabled mudar
 
   return {};
 };
