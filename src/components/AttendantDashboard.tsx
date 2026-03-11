@@ -1670,7 +1670,6 @@ export default function AttendantDashboard() {
         onContactsClick={() => setCurrentView('contatos')}
         onTransfersClick={() => setCurrentView('transferencias')}
         onHistoryClick={() => setCurrentView('historico')}
-        onSettingsClick={() => setCurrentView('configuracoes')}
         onLogout={signOut}
         showNavigationOptions={true}
         showSettings={false}

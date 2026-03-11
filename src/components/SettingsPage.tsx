@@ -1,525 +1,308 @@
 import { useState, useEffect, useRef } from 'react';
-import { Palette, Building2, Upload, X, RotateCcw, Check, Save } from 'lucide-react';
+import { Palette, Building2, Upload, X, RotateCcw, Check, Save, MessageSquare } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
+
+const inputCls =
+  'w-full px-3 py-2.5 text-sm bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 ' +
+  'text-slate-900 dark:text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ' +
+  'focus:border-transparent transition-all placeholder:text-slate-400';
+
+const labelCls = 'block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1.5';
+
+const BUBBLE_COLORS = ['#3b82f6','#10b981','#8b5cf6','#ec4899','#f97316','#ef4444','#0ea5e9','#64748b'];
+const TEXT_COLORS   = ['#ffffff','#f8fafc','#f1f5f9','#1e293b','#374151','#111827'];
+const BG_COLORS     = ['#efeae2','#f8fafc','#f0f4f8','#e8f5e9','#fce4ec','#ede7f6','#ffffff','#1e293b'];
+
+function Card({ title, desc, icon: Icon, children }: {
+  title: string; desc: string; icon: React.ElementType; children: React.ReactNode;
+}) {
+  return (
+    <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden">
+      <div className="px-5 py-4 border-b border-slate-100 dark:border-slate-700/50 flex items-center gap-3">
+        <div className="w-8 h-8 bg-slate-100 dark:bg-slate-800 rounded-lg flex items-center justify-center flex-shrink-0">
+          <Icon className="w-4 h-4 text-slate-500 dark:text-slate-400" />
+        </div>
+        <div>
+          <p className="text-sm font-semibold text-slate-900 dark:text-white leading-none">{title}</p>
+          <p className="text-xs text-slate-400 mt-0.5">{desc}</p>
+        </div>
+      </div>
+      <div className="p-5">{children}</div>
+    </div>
+  );
+}
+
+function ColorRow({ label, value, onChange, swatches }: {
+  label: string; value: string; onChange: (v: string) => void; swatches: string[];
+}) {
+  return (
+    <div>
+      <label className={labelCls}>{label}</label>
+      <div className="flex items-center gap-3 flex-wrap">
+        <div className="flex gap-1.5 flex-wrap">
+          {swatches.map(c => (
+            <button key={c} type="button" onClick={() => onChange(c)} title={c}
+              className={`w-5 h-5 rounded-md flex-shrink-0 transition-all border ${
+                value.toLowerCase() === c.toLowerCase()
+                  ? 'ring-2 ring-offset-1 ring-blue-500 scale-110 border-transparent'
+                  : 'border-slate-200 dark:border-slate-600 hover:scale-110'
+              }`}
+              style={{ backgroundColor: c }} />
+          ))}
+        </div>
+        <div className="flex items-center gap-1.5 ml-auto">
+          <input type="color" value={value} onChange={e => onChange(e.target.value)}
+            className="w-7 h-7 rounded cursor-pointer border border-slate-200 dark:border-slate-600 p-0.5 bg-transparent flex-shrink-0" />
+          <input type="text" value={value}
+            onChange={e => { const v = e.target.value.trim(); onChange(v.startsWith('#') ? v : '#' + v); }}
+            className="w-20 px-2 py-1 text-xs font-mono bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-600 text-slate-700 dark:text-slate-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ChatPreview({ bgColor, sentBg, sentText, receivedBg, receivedText }: {
+  bgColor: string; sentBg: string; sentText: string; receivedBg: string; receivedText: string;
+}) {
+  const msgs = [
+    { sent: false, text: 'Olá! Como posso ajudar?', time: '10:30' },
+    { sent: true,  text: 'Quero informações sobre o produto.', time: '10:31' },
+    { sent: false, text: 'Claro! Me conta o que precisa 😊', time: '10:31' },
+    { sent: true,  text: 'Obrigado pelo suporte!', time: '10:32' },
+  ];
+  return (
+    <div className="rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden shadow-sm">
+      <div className="flex items-center gap-2 px-3 py-2.5 bg-slate-800 border-b border-slate-700">
+        <div className="w-7 h-7 bg-blue-500 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0">C</div>
+        <div>
+          <p className="text-xs font-semibold text-white leading-none">Cliente</p>
+          <p className="text-[10px] text-slate-400 mt-0.5">● online</p>
+        </div>
+      </div>
+      <div className="p-3 space-y-2" style={{ backgroundColor: bgColor, minHeight: 220 }}>
+        {msgs.map((m, i) => (
+          <div key={i} className={`flex ${m.sent ? 'justify-end' : 'justify-start'}`}>
+            <div className="max-w-[78%] px-3 py-1.5 rounded-xl shadow-sm"
+              style={m.sent ? { backgroundColor: sentBg, color: sentText } : { backgroundColor: receivedBg, color: receivedText }}>
+              <p className="text-xs leading-relaxed">{m.text}</p>
+              <p className="text-[10px] opacity-50 mt-0.5 text-right">{m.time}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 export default function SettingsPage() {
   const { settings, updateSettings, resetSettings } = useTheme();
   const [uploadingLogo, setUploadingLogo] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [savedMessage, setSavedMessage] = useState('');
+  const [savedMsg, setSavedMsg] = useState('');
   const [hasChanges, setHasChanges] = useState(false);
-  const isInitialized = useRef(false);
+  const isInit = useRef(false);
 
-  const [formData, setFormData] = useState({
-    companyName: settings.companyName || '',
-    logoUrl: settings.logoUrl || '',
-    backgroundColor: settings.backgroundColor || '#f8fafc',
-    messageBubbleSentColor: settings.messageBubbleSentColor || '#3b82f6',
-    messageBubbleSentTextColor: settings.messageBubbleSentTextColor || '#ffffff',
-    messageBubbleReceivedColor: settings.messageBubbleReceivedColor || '#ffffff',
+  const [form, setForm] = useState({
+    companyName:                    settings.companyName                    || '',
+    logoUrl:                        settings.logoUrl                        || '',
+    backgroundColor:                settings.backgroundColor                || '#efeae2',
+    messageBubbleSentColor:         settings.messageBubbleSentColor         || '#3b82f6',
+    messageBubbleSentTextColor:     settings.messageBubbleSentTextColor     || '#ffffff',
+    messageBubbleReceivedColor:     settings.messageBubbleReceivedColor     || '#ffffff',
     messageBubbleReceivedTextColor: settings.messageBubbleReceivedTextColor || '#1e293b',
   });
 
   useEffect(() => {
-    if (!isInitialized.current && settings.companyName) {
-      setFormData({
-        companyName: settings.companyName || '',
-        logoUrl: settings.logoUrl || '',
-        backgroundColor: settings.backgroundColor || '#f8fafc',
-        messageBubbleSentColor: settings.messageBubbleSentColor || '#3b82f6',
-        messageBubbleSentTextColor: settings.messageBubbleSentTextColor || '#ffffff',
-        messageBubbleReceivedColor: settings.messageBubbleReceivedColor || '#ffffff',
+    if (!isInit.current && settings.companyName !== undefined) {
+      setForm({
+        companyName:                    settings.companyName                    || '',
+        logoUrl:                        settings.logoUrl                        || '',
+        backgroundColor:                settings.backgroundColor                || '#efeae2',
+        messageBubbleSentColor:         settings.messageBubbleSentColor         || '#3b82f6',
+        messageBubbleSentTextColor:     settings.messageBubbleSentTextColor     || '#ffffff',
+        messageBubbleReceivedColor:     settings.messageBubbleReceivedColor     || '#ffffff',
         messageBubbleReceivedTextColor: settings.messageBubbleReceivedTextColor || '#1e293b',
       });
-      isInitialized.current = true;
+      isInit.current = true;
     }
   }, [settings]);
 
-  const showSavedMessage = (message: string) => {
-    setSavedMessage(message);
-    setTimeout(() => setSavedMessage(''), 3000);
-  };
+  const upd = (updates: Partial<typeof form>) => { setForm(p => ({ ...p, ...updates })); setHasChanges(true); };
+  const flash = (msg: string) => { setSavedMsg(msg); setTimeout(() => setSavedMsg(''), 3000); };
 
-  const updateFormData = (updates: Partial<typeof formData>) => {
-    setFormData(prev => ({ ...prev, ...updates }));
-    setHasChanges(true);
-  };
-
-  const isValidHexColor = (color: string): boolean => {
-    return /^#[0-9A-F]{6}$/i.test(color);
-  };
-
-  const normalizeHexColor = (color: string): string => {
-    color = color.trim();
-    if (!color.startsWith('#')) {
-      color = '#' + color;
-    }
-    color = color.toUpperCase();
-    if (isValidHexColor(color)) {
-      return color;
-    }
-    return color;
-  };
-
-  const handleColorTextChange = (field: keyof typeof formData, value: string) => {
-    const normalized = normalizeHexColor(value);
-    updateFormData({ [field]: normalized } as any);
-  };
-
-  const convertToBase64 = (file: File): Promise<string> => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(reader.result as string);
-      reader.onerror = error => reject(error);
-      reader.readAsDataURL(file);
-    });
-  };
-
-  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    if (!file.type.startsWith('image/')) {
-      alert('Por favor, selecione um arquivo de imagem válido');
-      return;
-    }
-
-    if (file.size > 5 * 1024 * 1024) {
-      alert('O arquivo deve ter no máximo 5MB');
-      return;
-    }
-
+  const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]; if (!file) return;
+    if (!file.type.startsWith('image/')) { alert('Selecione uma imagem válida'); return; }
+    if (file.size > 5 * 1024 * 1024) { alert('Máx 5 MB'); return; }
     setUploadingLogo(true);
-
-    try {
-      const base64Image = await convertToBase64(file);
-      updateFormData({ logoUrl: base64Image });
-    } catch (error) {
-      console.error('Erro ao processar o logo:', error);
-      alert('Erro ao processar o logo');
-    } finally {
-      setUploadingLogo(false);
-    }
-  };
-
-  const handleRemoveLogo = () => {
-    updateFormData({ logoUrl: '' });
+    const reader = new FileReader();
+    reader.onload = () => { upd({ logoUrl: reader.result as string }); setUploadingLogo(false); };
+    reader.onerror = () => setUploadingLogo(false);
+    reader.readAsDataURL(file);
   };
 
   const handleSave = async () => {
     setSaving(true);
-    try {
-      await updateSettings(formData);
-      setHasChanges(false);
-      showSavedMessage('Configurações salvas com sucesso!');
-    } catch (error) {
-      console.error('Erro ao salvar configurações:', error);
-      alert('Erro ao salvar configurações');
-    } finally {
-      setSaving(false);
-    }
+    try { await updateSettings(form); setHasChanges(false); flash('Configurações salvas!'); }
+    catch { alert('Erro ao salvar'); }
+    finally { setSaving(false); }
   };
 
-  const handleResetSentBubble = () => {
-    updateFormData({
-      messageBubbleSentColor: '#3b82f6',
-      messageBubbleSentTextColor: '#ffffff',
-    });
+  const handleReset = async () => {
+    if (!confirm('Restaurar todas as configurações para o padrão?')) return;
+    await resetSettings();
+    const d = { companyName: '', logoUrl: '', backgroundColor: '#efeae2', messageBubbleSentColor: '#3b82f6', messageBubbleSentTextColor: '#ffffff', messageBubbleReceivedColor: '#ffffff', messageBubbleReceivedTextColor: '#1e293b' };
+    setForm(d); setHasChanges(false); flash('Configurações restauradas!');
   };
-
-  const handleResetReceivedBubble = () => {
-    updateFormData({
-      messageBubbleReceivedColor: '#ffffff',
-      messageBubbleReceivedTextColor: '#1e293b',
-    });
-  };
-
-  const handleResetAll = async () => {
-    if (confirm('Tem certeza que deseja restaurar TODAS as configurações para o padrão? Esta ação não pode ser desfeita.')) {
-      try {
-        await resetSettings();
-        setFormData({
-          companyName: '',
-          logoUrl: '',
-          backgroundColor: '#f8fafc',
-          messageBubbleSentColor: '#3b82f6',
-          messageBubbleSentTextColor: '#ffffff',
-          messageBubbleReceivedColor: '#ffffff',
-          messageBubbleReceivedTextColor: '#1e293b',
-        });
-        setHasChanges(false);
-        showSavedMessage('Todas as configurações foram resetadas!');
-      } catch (error) {
-        console.error('Erro ao resetar configurações:', error);
-        alert('Erro ao resetar configurações');
-      }
-    }
-  };
-
-  const messageColorPresets = [
-    { name: 'Azul', value: '#3b82f6' },
-    { name: 'Verde', value: '#10b981' },
-    { name: 'Roxo', value: '#8b5cf6' },
-    { name: 'Rosa', value: '#ec4899' },
-    { name: 'Laranja', value: '#f97316' },
-    { name: 'Cinza', value: '#64748b' },
-  ];
 
   return (
-    <div className="flex-1 overflow-y-auto bg-gradient-to-br from-slate-50 to-blue-50 p-8">
-      <div className="max-w-7xl mx-auto">
-        {savedMessage && (
-          <div className="fixed top-4 right-4 z-50 bg-green-500 text-white px-6 py-3 rounded-lg shadow-lg flex items-center gap-2 animate-slideUp">
-            <Check className="w-5 h-5" />
-            {savedMessage}
-          </div>
-        )}
+    <div className="p-6 w-full">
 
-        {hasChanges && (
-          <div className="fixed bottom-6 right-6 z-50 bg-orange-500 text-white px-6 py-3 rounded-lg shadow-xl flex items-center gap-3">
-            <div className="w-2 h-2 bg-white rounded-full animate-pulse"></div>
-            Você tem alterações não salvas
-          </div>
-        )}
+      {/* Toast */}
+      {savedMsg && (
+        <div className="fixed top-4 right-4 z-50 flex items-center gap-2 px-4 py-2.5 bg-emerald-600 text-white text-sm font-medium rounded-lg shadow-lg"
+          style={{ animation: 'fsDown .2s ease-out' }}>
+          <style>{`@keyframes fsDown{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:translateY(0)}}`}</style>
+          <Check className="w-4 h-4" /> {savedMsg}
+        </div>
+      )}
 
-        <div className="animate-fadeIn mb-8">
-          <h1 className="text-3xl font-bold text-slate-900 mb-2">Configurações da Empresa</h1>
-          <p className="text-slate-600">Personalize a aparência do seu sistema. Clique em "Salvar Alterações" para aplicar as mudanças.</p>
+      <div className="max-w-5xl mx-auto">
+
+        {/* Header */}
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <h2 className="text-xl font-semibold text-slate-900 dark:text-white">Configurações</h2>
+            <p className="text-sm text-slate-500 mt-0.5">Personalize a identidade e aparência do sistema</p>
+          </div>
+          {hasChanges && (
+            <span className="flex items-center gap-1.5 text-xs text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20 px-2.5 py-1 rounded-full font-medium">
+              <span className="w-1.5 h-1.5 bg-amber-500 rounded-full animate-pulse inline-block" />
+              Alterações não salvas
+            </span>
+          )}
         </div>
 
-        <div className="space-y-6">
-          <div className="bg-white rounded-2xl p-6 shadow-lg border border-slate-200 animate-slideUp">
-            <div className="flex items-center justify-between mb-6">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-gradient-to-br from-blue-100 to-blue-200 rounded-lg flex items-center justify-center">
-                  <Building2 className="w-5 h-5 text-blue-600" />
+        {/* Grid: controles + preview sticky */}
+        <div className="grid grid-cols-1 xl:grid-cols-[1fr_300px] gap-5 items-start">
+
+          {/* Esquerda */}
+          <div className="space-y-4">
+
+            {/* Identidade */}
+            <Card title="Identidade da Empresa" desc="Nome e logo exibidos no sistema" icon={Building2}>
+              <div className="space-y-4">
+                <div>
+                  <label className={labelCls}>Nome da empresa</label>
+                  <input type="text" value={form.companyName} onChange={e => upd({ companyName: e.target.value })}
+                    placeholder="Nome da sua empresa" className={inputCls} />
                 </div>
                 <div>
-                  <h2 className="text-xl font-bold text-slate-900">Identidade da Empresa</h2>
-                  <p className="text-sm text-slate-600">Logo e nome exibidos no sistema</p>
+                  <label className={labelCls}>
+                    Logo&nbsp;<span className="font-normal text-slate-400">(200×60 px · máx 5 MB)</span>
+                  </label>
+                  <div className="flex items-center gap-3 flex-wrap">
+                    {form.logoUrl ? (
+                      <div className="relative inline-flex">
+                        <img src={form.logoUrl} alt="Logo"
+                          className="h-10 max-w-[160px] object-contain border border-slate-200 dark:border-slate-700 rounded-lg p-1 bg-white dark:bg-slate-800" />
+                        <button onClick={() => upd({ logoUrl: '' })}
+                          className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-red-500 hover:bg-red-600 text-white rounded-full flex items-center justify-center transition-colors">
+                          <X className="w-3 h-3" />
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="w-16 h-10 rounded-lg border-2 border-dashed border-slate-200 dark:border-slate-600 flex items-center justify-center text-slate-300">
+                        <Building2 className="w-4 h-4" />
+                      </div>
+                    )}
+                    <label className="inline-flex items-center gap-2 px-3.5 py-2 bg-slate-900 dark:bg-slate-700 hover:bg-slate-700 dark:hover:bg-slate-600 text-white text-sm font-medium rounded-lg cursor-pointer transition-colors">
+                      <Upload className="w-3.5 h-3.5" />
+                      {uploadingLogo ? 'Processando…' : form.logoUrl ? 'Trocar logo' : 'Enviar logo'}
+                      <input type="file" accept="image/*" onChange={handleLogoUpload} disabled={uploadingLogo} className="hidden" />
+                    </label>
+                  </div>
                 </div>
               </div>
-            </div>
+            </Card>
 
-            <div className="space-y-6">
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">
-                  Nome da Empresa
-                </label>
-                <input
-                  type="text"
-                  value={formData.companyName}
-                  onChange={(e) => updateFormData({ companyName: e.target.value })}
-                  placeholder="Digite o nome da empresa"
-                  className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
-                />
-              </div>
+            {/* Cores */}
+            <Card title="Aparência das Mensagens" desc="Cores dos balões de conversa" icon={Palette}>
+              <div className="space-y-5">
 
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">
-                  Logo da Empresa <span className="text-slate-500">(Recomendado: 200x60px)</span>
-                </label>
+                {/* Fundo */}
+                <ColorRow label="Fundo do chat" value={form.backgroundColor} onChange={v => upd({ backgroundColor: v })} swatches={BG_COLORS} />
 
-                {formData.logoUrl && (
-                  <div className="mb-4 relative inline-block">
-                    <img
-                      src={formData.logoUrl}
-                      alt="Logo"
-                      className="h-16 object-contain border border-slate-200 rounded-lg p-2 bg-white"
-                    />
-                    <button
-                      onClick={handleRemoveLogo}
-                      className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center hover:bg-red-600 transition-colors"
-                    >
-                      <X className="w-4 h-4" />
-                    </button>
-                  </div>
-                )}
+                <div className="h-px bg-slate-100 dark:bg-slate-700/60" />
 
-                <label className="inline-flex items-center gap-2 px-4 py-2.5 bg-blue-500 text-white rounded-lg hover:bg-blue-600 cursor-pointer transition-all">
-                  <Upload className="w-4 h-4" />
-                  {uploadingLogo ? 'Enviando...' : 'Enviar Logo'}
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onChange={handleLogoUpload}
-                    disabled={uploadingLogo}
-                    className="hidden"
-                  />
-                </label>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white rounded-2xl p-6 shadow-lg border border-slate-200 animate-slideUp">
-            <div className="flex items-center gap-3 mb-6">
-              <div className="w-10 h-10 bg-gradient-to-br from-green-100 to-green-200 rounded-lg flex items-center justify-center">
-                <Palette className="w-5 h-5 text-green-600" />
-              </div>
-              <div>
-                <h2 className="text-xl font-bold text-slate-900">Balões de Mensagem</h2>
-                <p className="text-sm text-slate-600">Personalize as cores das mensagens</p>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 lg:grid-cols-5 gap-8">
-              <div className="lg:col-span-3 space-y-8">
+                {/* Recebidas */}
                 <div>
-                  <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-lg font-semibold text-slate-900">Mensagens Recebidas</h3>
-                    <button
-                      onClick={handleResetReceivedBubble}
-                      className="px-3 py-1.5 text-xs bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 transition-all flex items-center gap-1"
-                    >
-                      <RotateCcw className="w-3 h-3" />
-                      Resetar
+                  <div className="flex items-center justify-between mb-3">
+                    <p className="text-sm font-medium text-slate-700 dark:text-slate-300">Mensagens recebidas</p>
+                    <button onClick={() => upd({ messageBubbleReceivedColor: '#ffffff', messageBubbleReceivedTextColor: '#1e293b' })}
+                      className="flex items-center gap-1 text-xs text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors">
+                      <RotateCcw className="w-3 h-3" /> Resetar
                     </button>
                   </div>
-
-                  <div className="space-y-4">
-                    <div>
-                      <label className="block text-sm font-medium text-slate-700 mb-3">
-                        Cor do Balão
-                      </label>
-                      <div className="grid grid-cols-3 sm:grid-cols-6 gap-3 mb-3">
-                        {messageColorPresets.map((preset) => (
-                          <button
-                            key={preset.value}
-                            onClick={() => updateFormData({ messageBubbleReceivedColor: preset.value })}
-                            className="relative group"
-                          >
-                            <div
-                              className={`w-full aspect-square rounded-lg transition-all duration-200 border-2 ${
-                                formData.messageBubbleReceivedColor === preset.value
-                                  ? 'border-blue-500 scale-95'
-                                  : 'border-slate-300 hover:scale-105'
-                              }`}
-                              style={{ backgroundColor: preset.value }}
-                            />
-                            <p className="text-xs font-medium text-slate-700 mt-1 text-center">
-                              {preset.name}
-                            </p>
-                          </button>
-                        ))}
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <input
-                          type="color"
-                          value={formData.messageBubbleReceivedColor}
-                          onChange={(e) => updateFormData({ messageBubbleReceivedColor: e.target.value })}
-                          className="w-16 h-10 rounded-lg cursor-pointer border-2 border-slate-300"
-                        />
-                        <input
-                          type="text"
-                          value={formData.messageBubbleReceivedColor}
-                          onChange={(e) => handleColorTextChange('messageBubbleReceivedColor', e.target.value)}
-                          className="flex-1 px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                          placeholder="#ffffff"
-                        />
-                      </div>
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-slate-700 mb-2">
-                        Cor do Texto
-                      </label>
-                      <div className="flex items-center gap-3">
-                        <input
-                          type="color"
-                          value={formData.messageBubbleReceivedTextColor}
-                          onChange={(e) => updateFormData({ messageBubbleReceivedTextColor: e.target.value })}
-                          className="w-16 h-10 rounded-lg cursor-pointer border-2 border-slate-300"
-                        />
-                        <input
-                          type="text"
-                          value={formData.messageBubbleReceivedTextColor}
-                          onChange={(e) => handleColorTextChange('messageBubbleReceivedTextColor', e.target.value)}
-                          className="flex-1 px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                          placeholder="#1e293b"
-                        />
-                      </div>
-                    </div>
+                  <div className="space-y-3">
+                    <ColorRow label="Cor do balão" value={form.messageBubbleReceivedColor}     onChange={v => upd({ messageBubbleReceivedColor: v })}     swatches={BUBBLE_COLORS} />
+                    <ColorRow label="Cor do texto" value={form.messageBubbleReceivedTextColor} onChange={v => upd({ messageBubbleReceivedTextColor: v })} swatches={TEXT_COLORS}   />
                   </div>
                 </div>
 
-                <div className="border-t pt-8">
-                  <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-lg font-semibold text-slate-900">Mensagens Enviadas</h3>
-                    <button
-                      onClick={handleResetSentBubble}
-                      className="px-3 py-1.5 text-xs bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 transition-all flex items-center gap-1"
-                    >
-                      <RotateCcw className="w-3 h-3" />
-                      Resetar
+                <div className="h-px bg-slate-100 dark:bg-slate-700/60" />
+
+                {/* Enviadas */}
+                <div>
+                  <div className="flex items-center justify-between mb-3">
+                    <p className="text-sm font-medium text-slate-700 dark:text-slate-300">Mensagens enviadas</p>
+                    <button onClick={() => upd({ messageBubbleSentColor: '#3b82f6', messageBubbleSentTextColor: '#ffffff' })}
+                      className="flex items-center gap-1 text-xs text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors">
+                      <RotateCcw className="w-3 h-3" /> Resetar
                     </button>
                   </div>
-
-                  <div className="space-y-4">
-                    <div>
-                      <label className="block text-sm font-medium text-slate-700 mb-3">
-                        Cor do Balão
-                      </label>
-                      <div className="grid grid-cols-3 sm:grid-cols-6 gap-3 mb-3">
-                        {messageColorPresets.map((preset) => (
-                          <button
-                            key={preset.value}
-                            onClick={() => updateFormData({ messageBubbleSentColor: preset.value })}
-                            className="relative group"
-                          >
-                            <div
-                              className={`w-full aspect-square rounded-lg transition-all duration-200 border-2 ${
-                                formData.messageBubbleSentColor === preset.value
-                                  ? 'border-blue-500 scale-95'
-                                  : 'border-slate-300 hover:scale-105'
-                              }`}
-                              style={{ backgroundColor: preset.value }}
-                            />
-                            <p className="text-xs font-medium text-slate-700 mt-1 text-center">
-                              {preset.name}
-                            </p>
-                          </button>
-                        ))}
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <input
-                          type="color"
-                          value={formData.messageBubbleSentColor}
-                          onChange={(e) => updateFormData({ messageBubbleSentColor: e.target.value })}
-                          className="w-16 h-10 rounded-lg cursor-pointer border-2 border-slate-300"
-                        />
-                        <input
-                          type="text"
-                          value={formData.messageBubbleSentColor}
-                          onChange={(e) => handleColorTextChange('messageBubbleSentColor', e.target.value)}
-                          className="flex-1 px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                          placeholder="#3b82f6"
-                        />
-                      </div>
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-slate-700 mb-2">
-                        Cor do Texto
-                      </label>
-                      <div className="flex items-center gap-3">
-                        <input
-                          type="color"
-                          value={formData.messageBubbleSentTextColor}
-                          onChange={(e) => updateFormData({ messageBubbleSentTextColor: e.target.value })}
-                          className="w-16 h-10 rounded-lg cursor-pointer border-2 border-slate-300"
-                        />
-                        <input
-                          type="text"
-                          value={formData.messageBubbleSentTextColor}
-                          onChange={(e) => handleColorTextChange('messageBubbleSentTextColor', e.target.value)}
-                          className="flex-1 px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                          placeholder="#ffffff"
-                        />
-                      </div>
-                    </div>
+                  <div className="space-y-3">
+                    <ColorRow label="Cor do balão" value={form.messageBubbleSentColor}     onChange={v => upd({ messageBubbleSentColor: v })}     swatches={BUBBLE_COLORS} />
+                    <ColorRow label="Cor do texto" value={form.messageBubbleSentTextColor} onChange={v => upd({ messageBubbleSentTextColor: v })} swatches={TEXT_COLORS}   />
                   </div>
                 </div>
+
               </div>
+            </Card>
 
-              <div className="lg:col-span-2">
-                <div className="sticky top-6">
-                  <div className="flex items-center justify-center mb-4">
-                    <h3 className="text-2xl font-bold text-slate-900 text-center">Visualização</h3>
-                  </div>
-                  <div className="space-y-5 p-8 rounded-2xl border-4 border-blue-200 shadow-2xl min-h-[600px] flex flex-col justify-center" style={{ backgroundColor: formData.backgroundColor }}>
-                    <div className="flex justify-start">
-                      <div
-                        className="max-w-[75%] px-6 py-4 rounded-2xl rounded-tl-sm shadow-lg"
-                        style={{
-                          backgroundColor: formData.messageBubbleReceivedColor,
-                          color: formData.messageBubbleReceivedTextColor
-                        }}
-                      >
-                        <p className="text-base font-medium leading-relaxed">
-                          Exemplo de mensagem recebida
-                        </p>
-                        <p className="text-xs opacity-70 mt-2">10:30</p>
-                      </div>
-                    </div>
+          </div>{/* fim esquerda */}
 
-                    <div className="flex justify-end">
-                      <div
-                        className="max-w-[75%] px-6 py-4 rounded-2xl rounded-tr-sm shadow-lg"
-                        style={{
-                          backgroundColor: formData.messageBubbleSentColor,
-                          color: formData.messageBubbleSentTextColor
-                        }}
-                      >
-                        <p className="text-base font-medium leading-relaxed">
-                          Exemplo de mensagem enviada
-                        </p>
-                        <p className="text-xs opacity-70 mt-2">10:32</p>
-                      </div>
-                    </div>
-
-                    <div className="flex justify-start">
-                      <div
-                        className="max-w-[75%] px-6 py-4 rounded-2xl rounded-tl-sm shadow-lg"
-                        style={{
-                          backgroundColor: formData.messageBubbleReceivedColor,
-                          color: formData.messageBubbleReceivedTextColor
-                        }}
-                      >
-                        <p className="text-base font-medium leading-relaxed">
-                          Olá! Como posso ajudar?
-                        </p>
-                        <p className="text-xs opacity-70 mt-2">10:33</p>
-                      </div>
-                    </div>
-
-                    <div className="flex justify-end">
-                      <div
-                        className="max-w-[75%] px-6 py-4 rounded-2xl rounded-tr-sm shadow-lg"
-                        style={{
-                          backgroundColor: formData.messageBubbleSentColor,
-                          color: formData.messageBubbleSentTextColor
-                        }}
-                      >
-                        <p className="text-base font-medium leading-relaxed">
-                          Gostaria de mais informações sobre o produto
-                        </p>
-                        <p className="text-xs opacity-70 mt-2">10:35</p>
-                      </div>
-                    </div>
-
-                    <div className="text-center mt-6 pt-6 border-t-2 border-slate-300">
-                      <p className="text-sm font-semibold text-slate-600">Preview em Tempo Real</p>
-                      <p className="text-xs text-slate-500 mt-1">As alterações aparecem instantaneamente</p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
+          {/* Direita — preview sticky */}
+          <div className="xl:sticky xl:top-6">
+            <Card title="Preview" desc="Visualização em tempo real" icon={MessageSquare}>
+              <ChatPreview
+                bgColor={form.backgroundColor}
+                sentBg={form.messageBubbleSentColor}
+                sentText={form.messageBubbleSentTextColor}
+                receivedBg={form.messageBubbleReceivedColor}
+                receivedText={form.messageBubbleReceivedTextColor}
+              />
+            </Card>
           </div>
 
-          <div className="flex items-center justify-between gap-4 sticky bottom-0 bg-white p-6 rounded-2xl shadow-lg border border-slate-200">
-            <button
-              onClick={handleResetAll}
-              className="px-6 py-3 bg-red-500 text-white font-semibold rounded-lg hover:bg-red-600 transition-all shadow-lg hover:shadow-xl flex items-center gap-2"
-            >
-              <RotateCcw className="w-4 h-4" />
-              Restaurar Tudo ao Padrão
-            </button>
+        </div>{/* fim grid */}
 
-            <button
-              onClick={handleSave}
-              disabled={!hasChanges || saving}
-              className={`px-8 py-3 font-semibold rounded-lg transition-all shadow-lg hover:shadow-xl flex items-center gap-2 ${
-                hasChanges && !saving
-                  ? 'bg-blue-500 text-white hover:bg-blue-600'
-                  : 'bg-slate-300 text-slate-500 cursor-not-allowed'
-              }`}
-            >
-              <Save className="w-5 h-5" />
-              {saving ? 'Salvando...' : 'Salvar Alterações'}
-            </button>
-          </div>
+        {/* Ações */}
+        <div className="flex items-center justify-between gap-4 mt-5 pt-5 border-t border-slate-200 dark:border-slate-700">
+          <button onClick={handleReset}
+            className="flex items-center gap-2 px-4 py-2 border border-slate-200 dark:border-slate-700 hover:border-red-300 dark:hover:border-red-500/40 text-slate-500 dark:text-slate-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/5 text-sm font-medium rounded-lg transition-all">
+            <RotateCcw className="w-3.5 h-3.5" /> Restaurar padrões
+          </button>
+          <button onClick={handleSave} disabled={!hasChanges || saving}
+            className={`flex items-center gap-2 px-5 py-2.5 text-sm font-medium rounded-lg transition-all ${
+              hasChanges && !saving ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-sm' : 'bg-slate-100 dark:bg-slate-800 text-slate-400 cursor-not-allowed'
+            }`}>
+            <Save className="w-4 h-4" />
+            {saving ? 'Salvando…' : 'Salvar alterações'}
+          </button>
         </div>
+
       </div>
     </div>
   );

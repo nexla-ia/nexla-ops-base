@@ -1,15 +1,14 @@
-import { History, Settings, LogOut, MessageSquare, Users, Briefcase, FolderTree, CircleUser as UserCircle2, Tag, CreditCard, Bell, X, CheckCheck, Info, AlertCircle, XCircle, Bot, ArrowRightLeft } from 'lucide-react';
-const PaymentIcon = CreditCard;
-import { useRef, useEffect } from 'react';
+import {
+  History, Settings, LogOut, MessageSquare, Users, Briefcase,
+  FolderTree, CircleUser as UserCircle2, Tag, CreditCard, Bell,
+  X, CheckCheck, Info, AlertCircle, XCircle, CreditCard as PaymentIcon,
+  Bot, Menu, ChevronRight
+} from 'lucide-react';
+import { useRef, useEffect, useState } from 'react';
 
 interface NotificationItem {
-  id: string;
-  company_id: string;
-  title: string;
-  message: string;
-  type: 'payment' | 'info' | 'warning' | 'error';
-  is_read: boolean;
-  created_at: string;
+  id: string; company_id: string; title: string; message: string;
+  type: 'payment' | 'info' | 'warning' | 'error'; is_read: boolean; created_at: string;
 }
 
 interface ProfileDropdownProps {
@@ -39,372 +38,193 @@ interface ProfileDropdownProps {
   onToggleNotificationsPanel?: () => void;
 }
 
-const notificationTypeConfig = {
-  payment: {
-    icon: PaymentIcon,
-    color: 'text-amber-500',
-    bg: 'bg-amber-50',
-    border: 'border-amber-200',
-  },
-  info: {
-    icon: Info,
-    color: 'text-blue-500',
-    bg: 'bg-blue-50',
-    border: 'border-blue-200',
-  },
-  warning: {
-    icon: AlertCircle,
-    color: 'text-orange-500',
-    bg: 'bg-orange-50',
-    border: 'border-orange-200',
-  },
-  error: {
-    icon: XCircle,
-    color: 'text-red-500',
-    bg: 'bg-red-50',
-    border: 'border-red-200',
-  },
+const notifConfig = {
+  payment: { icon: PaymentIcon, color: 'text-amber-500', bg: 'bg-amber-50' },
+  info:    { icon: Info,         color: 'text-blue-500',  bg: 'bg-blue-50'  },
+  warning: { icon: AlertCircle,  color: 'text-orange-500',bg: 'bg-orange-50'},
+  error:   { icon: XCircle,      color: 'text-red-500',   bg: 'bg-red-50'   },
 };
 
-function formatRelativeTime(dateStr: string): string {
-  const date = new Date(dateStr);
-  const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
-  const diffMins = Math.floor(diffMs / 60000);
-  const diffHours = Math.floor(diffMins / 60);
-  const diffDays = Math.floor(diffHours / 24);
-
-  if (diffMins < 1) return 'Agora';
-  if (diffMins < 60) return `${diffMins}m atras`;
-  if (diffHours < 24) return `${diffHours}h atras`;
-  return `${diffDays}d atras`;
+function relTime(dateStr: string) {
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const m = Math.floor(diff / 60000), h = Math.floor(m / 60), d = Math.floor(h / 24);
+  if (m < 1) return 'Agora'; if (m < 60) return `${m}m`; if (h < 24) return `${h}h`; return `${d}d`;
 }
 
 export default function ProfileDropdown({
-  userName,
-  onHistoryClick,
-  onSettingsClick,
-  onLogout,
-  onMessagesClick,
-  onContactsClick,
-  onTransfersClick,
-  onDepartmentsClick,
-  onSectorsClick,
-  onAttendantsClick,
-  onTagsClick,
-  onMyPlanClick,
-  onAgentClick,
-  showNavigationOptions = false,
-  showSettings = true,
-  activeTab,
-  notifications = [],
-  unreadNotificationsCount = 0,
-  onMarkNotificationRead,
-  onMarkAllNotificationsRead,
-  showNotificationsPanel = false,
-  onToggleNotificationsPanel,
+  userName, onHistoryClick, onSettingsClick, onLogout,
+  onMessagesClick, onContactsClick, onDepartmentsClick, onSectorsClick,
+  onAttendantsClick, onTagsClick, onMyPlanClick, onAgentClick,
+  showNavigationOptions = false, showSettings = true, activeTab,
+  notifications = [], unreadNotificationsCount = 0,
+  onMarkNotificationRead, onMarkAllNotificationsRead,
+  showNotificationsPanel = false, onToggleNotificationsPanel,
 }: ProfileDropdownProps) {
   const panelRef = useRef<HTMLDivElement>(null);
+  const mobileMenuRef = useRef<HTMLDivElement>(null);
+  const [mobileOpen, setMobileOpen] = useState(false);
 
+  // Fecha painel de notificações clicando fora
   useEffect(() => {
     if (!showNotificationsPanel) return;
-    function handleClickOutside(e: MouseEvent) {
-      if (panelRef.current && !panelRef.current.contains(e.target as Node)) {
-        onToggleNotificationsPanel?.();
-      }
-    }
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [showNotificationsPanel, onToggleNotificationsPanel]);
+    const h = (e: MouseEvent) => { if (panelRef.current && !panelRef.current.contains(e.target as Node)) onToggleNotificationsPanel?.(); };
+    document.addEventListener('mousedown', h);
+    return () => document.removeEventListener('mousedown', h);
+  }, [showNotificationsPanel]);
+
+  // Fecha menu mobile clicando fora
+  useEffect(() => {
+    if (!mobileOpen) return;
+    const h = (e: MouseEvent) => { if (mobileMenuRef.current && !mobileMenuRef.current.contains(e.target as Node)) setMobileOpen(false); };
+    document.addEventListener('mousedown', h);
+    return () => document.removeEventListener('mousedown', h);
+  }, [mobileOpen]);
+
+  const navItems = [
+    { key: 'mensagens',     label: 'Mensagens',     icon: MessageSquare, fn: onMessagesClick },
+    { key: 'contatos',      label: 'Contatos',      icon: Users,         fn: onContactsClick },
+    { key: 'departamentos', label: 'Departamentos', icon: Briefcase,     fn: onDepartmentsClick },
+    { key: 'setores',       label: 'Setores',       icon: FolderTree,    fn: onSectorsClick },
+    { key: 'atendentes',    label: 'Atendentes',    icon: UserCircle2,   fn: onAttendantsClick },
+    { key: 'tags',          label: 'Tags',          icon: Tag,           fn: onTagsClick },
+    { key: 'agente',        label: 'Agente',        icon: Bot,           fn: onAgentClick },
+    { key: 'meu-plano',     label: 'Meu Plano',     icon: CreditCard,    fn: onMyPlanClick },
+    { key: 'historico',     label: 'Histórico',     icon: History,       fn: onHistoryClick },
+    { key: 'configuracoes', label: 'Configurações', icon: Settings,      fn: onSettingsClick },
+  ].filter(item => item.fn);
+
+  const handleNav = (fn?: () => void) => { fn?.(); setMobileOpen(false); };
 
   return (
-    <header className="fixed top-0 left-0 right-0 h-14 bg-slate-900 z-50 shadow-lg">
-      <div className="h-full flex items-center justify-between px-4">
-        <div className="flex items-center gap-1">
+    <header className="fixed top-0 left-0 right-0 h-14 bg-slate-900 z-50 border-b border-slate-800">
+      <div className="h-full flex items-center justify-between px-3 sm:px-4">
+
+        {/* ── Nav desktop ── */}
+        <nav className="flex items-center gap-0.5 overflow-x-auto scrollbar-none">
+          {showNavigationOptions && navItems.map(({ key, label, icon: Icon, fn }) => {
+            const isActive = activeTab === key;
+            return (
+              <button key={key} onClick={() => handleNav(fn)}
+                className={`relative flex items-center gap-1.5 px-2.5 py-2 rounded-lg text-sm font-medium transition-all duration-150 whitespace-nowrap flex-shrink-0 ${
+                  isActive ? 'text-white bg-slate-700/80' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
+                }`}
+              >
+                <Icon className="w-4 h-4 flex-shrink-0" />
+                <span className="hidden lg:inline">{label}</span>
+                {/* Underline ativo */}
+                {isActive && (
+                  <span className="absolute bottom-0 left-2 right-2 h-0.5 bg-blue-500 rounded-full" />
+                )}
+              </button>
+            );
+          })}
+        </nav>
+
+        {/* ── Direita: notif + user + logout ── */}
+        <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0 ml-2">
+
+          {/* Botão menu mobile — aparece só quando há muitos itens */}
           {showNavigationOptions && (
-            <>
-              {onMessagesClick && (
-                <button
-                  onClick={onMessagesClick}
-                  className={`relative flex items-center gap-2 px-3 py-2 rounded-lg transition-all duration-200 ${
-                    activeTab === 'mensagens'
-                      ? 'bg-blue-500/20 text-blue-400'
-                      : 'text-slate-400 hover:bg-slate-800 hover:text-white'
-                  }`}
-                >
-                  <MessageSquare className="w-4 h-4" />
-                  <span className="text-sm font-medium hidden sm:inline">Mensagens</span>
-                  {activeTab === 'mensagens' && (
-                    <span className="absolute bottom-0 left-1/2 -translate-x-1/2 w-8 h-0.5 bg-blue-500 rounded-full" />
-                  )}
-                </button>
-              )}
+            <div className="relative lg:hidden" ref={mobileMenuRef}>
+              <button onClick={() => setMobileOpen(v => !v)}
+                className={`p-2 rounded-lg transition-colors ${mobileOpen ? 'bg-slate-700 text-white' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}>
+                <Menu className="w-4 h-4" />
+              </button>
 
-              {onContactsClick && (
-                <button
-                  onClick={onContactsClick}
-                  className={`relative flex items-center gap-2 px-3 py-2 rounded-lg transition-all duration-200 ${
-                    activeTab === 'contatos'
-                      ? 'bg-blue-500/20 text-blue-400'
-                      : 'text-slate-400 hover:bg-slate-800 hover:text-white'
-                  }`}
-                >
-                  <Users className="w-4 h-4" />
-                  <span className="text-sm font-medium hidden sm:inline">Contatos</span>
-                  {activeTab === 'contatos' && (
-                    <span className="absolute bottom-0 left-1/2 -translate-x-1/2 w-8 h-0.5 bg-blue-500 rounded-full" />
-                  )}
-                </button>
+              {/* Drawer mobile */}
+              {mobileOpen && (
+                <div className="absolute right-0 top-full mt-2 w-52 bg-slate-800 border border-slate-700 rounded-xl shadow-2xl overflow-hidden"
+                  style={{ animation: 'fadeSlideDown 0.15s ease-out' }}>
+                  <style>{`@keyframes fadeSlideDown{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:translateY(0)}}`}</style>
+                  <div className="p-1.5">
+                    {navItems.map(({ key, label, icon: Icon, fn }) => {
+                      const isActive = activeTab === key;
+                      return (
+                        <button key={key} onClick={() => handleNav(fn)}
+                          className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-sm transition-colors ${
+                            isActive ? 'bg-blue-600 text-white' : 'text-slate-300 hover:bg-slate-700 hover:text-white'
+                          }`}>
+                          <div className="flex items-center gap-2.5">
+                            <Icon className="w-4 h-4" />
+                            <span className="font-medium">{label}</span>
+                          </div>
+                          {isActive && <ChevronRight className="w-3.5 h-3.5 opacity-70" />}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
               )}
-
-              {onTransfersClick && (
-                <button
-                  onClick={onTransfersClick}
-                  className={`relative flex items-center gap-2 px-3 py-2 rounded-lg transition-all duration-200 ${
-                    activeTab === 'transferencias'
-                      ? 'bg-blue-500/20 text-blue-400'
-                      : 'text-slate-400 hover:bg-slate-800 hover:text-white'
-                  }`}
-                >
-                  <ArrowRightLeft className="w-4 h-4" />
-                  <span className="text-sm font-medium hidden sm:inline">Transferências</span>
-                  {activeTab === 'transferencias' && (
-                    <span className="absolute bottom-0 left-1/2 -translate-x-1/2 w-8 h-0.5 bg-blue-500 rounded-full" />
-                  )}
-                </button>
-              )}
-
-              {onDepartmentsClick && (
-                <button
-                  onClick={onDepartmentsClick}
-                  className={`relative flex items-center gap-2 px-3 py-2 rounded-lg transition-all duration-200 ${
-                    activeTab === 'departamentos'
-                      ? 'bg-blue-500/20 text-blue-400'
-                      : 'text-slate-400 hover:bg-slate-800 hover:text-white'
-                  }`}
-                >
-                  <Briefcase className="w-4 h-4" />
-                  <span className="text-sm font-medium hidden sm:inline">Departamentos</span>
-                  {activeTab === 'departamentos' && (
-                    <span className="absolute bottom-0 left-1/2 -translate-x-1/2 w-8 h-0.5 bg-blue-500 rounded-full" />
-                  )}
-                </button>
-              )}
-
-              {onSectorsClick && (
-                <button
-                  onClick={onSectorsClick}
-                  className={`relative flex items-center gap-2 px-3 py-2 rounded-lg transition-all duration-200 ${
-                    activeTab === 'setores'
-                      ? 'bg-blue-500/20 text-blue-400'
-                      : 'text-slate-400 hover:bg-slate-800 hover:text-white'
-                  }`}
-                >
-                  <FolderTree className="w-4 h-4" />
-                  <span className="text-sm font-medium hidden sm:inline">Setores</span>
-                  {activeTab === 'setores' && (
-                    <span className="absolute bottom-0 left-1/2 -translate-x-1/2 w-8 h-0.5 bg-blue-500 rounded-full" />
-                  )}
-                </button>
-              )}
-
-              {onAttendantsClick && (
-                <button
-                  onClick={onAttendantsClick}
-                  className={`relative flex items-center gap-2 px-3 py-2 rounded-lg transition-all duration-200 ${
-                    activeTab === 'atendentes'
-                      ? 'bg-blue-500/20 text-blue-400'
-                      : 'text-slate-400 hover:bg-slate-800 hover:text-white'
-                  }`}
-                >
-                  <UserCircle2 className="w-4 h-4" />
-                  <span className="text-sm font-medium hidden sm:inline">Atendentes</span>
-                  {activeTab === 'atendentes' && (
-                    <span className="absolute bottom-0 left-1/2 -translate-x-1/2 w-8 h-0.5 bg-blue-500 rounded-full" />
-                  )}
-                </button>
-              )}
-
-              {onTagsClick && (
-                <button
-                  onClick={onTagsClick}
-                  className={`relative flex items-center gap-2 px-3 py-2 rounded-lg transition-all duration-200 ${
-                    activeTab === 'tags'
-                      ? 'bg-blue-500/20 text-blue-400'
-                      : 'text-slate-400 hover:bg-slate-800 hover:text-white'
-                  }`}
-                >
-                  <Tag className="w-4 h-4" />
-                  <span className="text-sm font-medium hidden sm:inline">Tags</span>
-                  {activeTab === 'tags' && (
-                    <span className="absolute bottom-0 left-1/2 -translate-x-1/2 w-8 h-0.5 bg-blue-500 rounded-full" />
-                  )}
-                </button>
-              )}
-
-              {onAgentClick && (
-                <button
-                  onClick={onAgentClick}
-                  className={`relative flex items-center gap-2 px-3 py-2 rounded-lg transition-all duration-200 ${
-                    activeTab === 'agente'
-                      ? 'bg-blue-500/20 text-blue-400'
-                      : 'text-slate-400 hover:bg-slate-800 hover:text-white'
-                  }`}
-                >
-                  <Bot className="w-4 h-4" />
-                  <span className="text-sm font-medium hidden sm:inline">Agente</span>
-                  {activeTab === 'agente' && (
-                    <span className="absolute bottom-0 left-1/2 -translate-x-1/2 w-8 h-0.5 bg-blue-500 rounded-full" />
-                  )}
-                </button>
-              )}
-
-              {onMyPlanClick && (
-                <button
-                  onClick={onMyPlanClick}
-                  className={`relative flex items-center gap-2 px-3 py-2 rounded-lg transition-all duration-200 ${
-                    activeTab === 'meu-plano'
-                      ? 'bg-blue-500/20 text-blue-400'
-                      : 'text-slate-400 hover:bg-slate-800 hover:text-white'
-                  }`}
-                >
-                  <CreditCard className="w-4 h-4" />
-                  <span className="text-sm font-medium hidden sm:inline">Meu Plano</span>
-                  {activeTab === 'meu-plano' && (
-                    <span className="absolute bottom-0 left-1/2 -translate-x-1/2 w-8 h-0.5 bg-blue-500 rounded-full" />
-                  )}
-                </button>
-              )}
-
-              <div className="w-px h-6 bg-slate-700 mx-2 hidden sm:block" />
-            </>
+            </div>
           )}
 
-          <button
-            onClick={onHistoryClick}
-            className={`relative flex items-center gap-2 px-3 py-2 rounded-lg transition-all duration-200 ${
-              activeTab === 'historico'
-                ? 'bg-blue-500/20 text-blue-400'
-                : 'text-slate-400 hover:bg-slate-800 hover:text-white'
-            }`}
-          >
-            <History className="w-4 h-4" />
-            <span className="text-sm font-medium hidden sm:inline">Historico</span>
-            {activeTab === 'historico' && (
-              <span className="absolute bottom-0 left-1/2 -translate-x-1/2 w-8 h-0.5 bg-blue-500 rounded-full" />
-            )}
-          </button>
-
-          {showSettings && (
-            <button
-              onClick={onSettingsClick}
-              className={`relative flex items-center gap-2 px-3 py-2 rounded-lg transition-all duration-200 ${
-                activeTab === 'configuracoes'
-                  ? 'bg-blue-500/20 text-blue-400'
-                  : 'text-slate-400 hover:bg-slate-800 hover:text-white'
-              }`}
-            >
-              <Settings className="w-4 h-4" />
-              <span className="text-sm font-medium hidden sm:inline">Configuracoes</span>
-              {activeTab === 'configuracoes' && (
-                <span className="absolute bottom-0 left-1/2 -translate-x-1/2 w-8 h-0.5 bg-blue-500 rounded-full" />
-              )}
-            </button>
-          )}
-        </div>
-
-        <div className="flex items-center gap-3">
+          {/* Notificações */}
           {onToggleNotificationsPanel && (
             <div className="relative" ref={panelRef}>
-              <button
-                onClick={onToggleNotificationsPanel}
-                className={`relative p-2 rounded-lg transition-all duration-200 ${
-                  showNotificationsPanel
-                    ? 'bg-slate-700 text-white'
-                    : 'text-slate-400 hover:bg-slate-800 hover:text-white'
-                }`}
-                title="Notificacoes"
-              >
-                <Bell className="w-5 h-5" />
+              <button onClick={onToggleNotificationsPanel}
+                className={`relative p-2 rounded-lg transition-colors ${showNotificationsPanel ? 'bg-slate-700 text-white' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}>
+                <Bell className="w-4 h-4" />
                 {unreadNotificationsCount > 0 && (
-                  <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs font-bold rounded-full w-4 h-4 flex items-center justify-center shadow-lg leading-none">
+                  <span className="absolute -top-0.5 -right-0.5 bg-red-500 text-white text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center leading-none">
                     {unreadNotificationsCount > 9 ? '9+' : unreadNotificationsCount}
                   </span>
                 )}
               </button>
 
               {showNotificationsPanel && (
-                <div className="absolute right-0 top-full mt-2 w-96 bg-white rounded-xl shadow-2xl border border-slate-200 overflow-hidden z-50">
-                  <div className="flex items-center justify-between px-4 py-3 bg-slate-50 border-b border-slate-200">
+                <div className="absolute right-0 top-full mt-2 w-80 sm:w-96 bg-white rounded-xl shadow-2xl border border-slate-200 overflow-hidden z-50"
+                  style={{ animation: 'fadeSlideDown 0.15s ease-out' }}>
+                  <style>{`@keyframes fadeSlideDown{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:translateY(0)}}`}</style>
+                  <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100">
                     <div className="flex items-center gap-2">
-                      <Bell className="w-4 h-4 text-slate-600" />
-                      <span className="font-semibold text-slate-800 text-sm">Notificacoes</span>
+                      <Bell className="w-4 h-4 text-slate-500" />
+                      <span className="font-semibold text-slate-800 text-sm">Notificações</span>
                       {unreadNotificationsCount > 0 && (
-                        <span className="bg-red-500 text-white text-xs font-bold rounded-full px-1.5 py-0.5 leading-none">
-                          {unreadNotificationsCount}
-                        </span>
+                        <span className="bg-red-500 text-white text-xs font-bold rounded-full px-1.5 py-0.5 leading-none">{unreadNotificationsCount}</span>
                       )}
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-1">
                       {unreadNotificationsCount > 0 && onMarkAllNotificationsRead && (
-                        <button
-                          onClick={onMarkAllNotificationsRead}
-                          className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 transition-colors font-medium"
-                          title="Marcar todas como lidas"
-                        >
-                          <CheckCheck className="w-3.5 h-3.5" />
-                          <span className="hidden sm:inline">Marcar todas</span>
+                        <button onClick={onMarkAllNotificationsRead}
+                          className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 px-2 py-1 rounded-lg hover:bg-blue-50 transition-colors font-medium">
+                          <CheckCheck className="w-3.5 h-3.5" /> Marcar todas
                         </button>
                       )}
-                      <button
-                        onClick={onToggleNotificationsPanel}
-                        className="p-1 text-slate-400 hover:text-slate-600 rounded transition-colors"
-                      >
+                      <button onClick={onToggleNotificationsPanel}
+                        className="p-1 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100 transition-colors">
                         <X className="w-4 h-4" />
                       </button>
                     </div>
                   </div>
-
-                  <div className="max-h-[400px] overflow-y-auto">
+                  <div className="max-h-96 overflow-y-auto">
                     {notifications.length === 0 ? (
-                      <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
-                        <Bell className="w-10 h-10 text-slate-300 mb-3" />
-                        <p className="text-slate-500 text-sm font-medium">Nenhuma notificacao</p>
-                        <p className="text-slate-400 text-xs mt-1">Voce esta em dia!</p>
+                      <div className="flex flex-col items-center justify-center py-10 text-center px-4">
+                        <Bell className="w-8 h-8 text-slate-300 mb-2" />
+                        <p className="text-sm font-medium text-slate-500">Nenhuma notificação</p>
+                        <p className="text-xs text-slate-400 mt-0.5">Você está em dia!</p>
                       </div>
                     ) : (
                       <div className="divide-y divide-slate-100">
-                        {notifications.map((notif) => {
-                          const cfg = notificationTypeConfig[notif.type] || notificationTypeConfig.info;
+                        {notifications.map(n => {
+                          const cfg = notifConfig[n.type] || notifConfig.info;
                           const Icon = cfg.icon;
                           return (
-                            <div
-                              key={notif.id}
-                              className={`px-4 py-3 transition-colors ${
-                                notif.is_read ? 'bg-white hover:bg-slate-50' : 'bg-blue-50/40 hover:bg-blue-50/60'
-                              }`}
-                            >
+                            <div key={n.id} className={`px-4 py-3 transition-colors ${n.is_read ? 'hover:bg-slate-50' : 'bg-blue-50/40 hover:bg-blue-50/60'}`}>
                               <div className="flex items-start gap-3">
-                                <div className={`flex-shrink-0 w-8 h-8 rounded-lg ${cfg.bg} flex items-center justify-center mt-0.5`}>
-                                  <Icon className={`w-4 h-4 ${cfg.color}`} />
+                                <div className={`flex-shrink-0 w-7 h-7 rounded-lg ${cfg.bg} flex items-center justify-center mt-0.5`}>
+                                  <Icon className={`w-3.5 h-3.5 ${cfg.color}`} />
                                 </div>
                                 <div className="flex-1 min-w-0">
                                   <div className="flex items-start justify-between gap-2">
-                                    <p className={`text-sm font-medium leading-snug ${notif.is_read ? 'text-slate-700' : 'text-slate-900'}`}>
-                                      {notif.title}
-                                    </p>
-                                    {!notif.is_read && (
-                                      <span className="flex-shrink-0 w-2 h-2 bg-blue-500 rounded-full mt-1.5" />
-                                    )}
+                                    <p className={`text-sm font-medium leading-snug ${n.is_read ? 'text-slate-700' : 'text-slate-900'}`}>{n.title}</p>
+                                    {!n.is_read && <span className="w-1.5 h-1.5 bg-blue-500 rounded-full mt-1.5 flex-shrink-0" />}
                                   </div>
-                                  <p className="text-xs text-slate-500 mt-0.5 leading-relaxed">{notif.message}</p>
+                                  <p className="text-xs text-slate-500 mt-0.5">{n.message}</p>
                                   <div className="flex items-center justify-between mt-1.5">
-                                    <span className="text-xs text-slate-400">{formatRelativeTime(notif.created_at)}</span>
-                                    {!notif.is_read && onMarkNotificationRead && (
-                                      <button
-                                        onClick={() => onMarkNotificationRead(notif.id)}
-                                        className="text-xs text-blue-600 hover:text-blue-800 transition-colors font-medium"
-                                      >
+                                    <span className="text-xs text-slate-400">{relTime(n.created_at)}</span>
+                                    {!n.is_read && onMarkNotificationRead && (
+                                      <button onClick={() => onMarkNotificationRead(n.id)}
+                                        className="text-xs text-blue-600 hover:text-blue-800 font-medium transition-colors">
                                         Marcar como lida
                                       </button>
                                     )}
@@ -422,18 +242,17 @@ export default function ProfileDropdown({
             </div>
           )}
 
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center text-white font-bold text-xs">
+          {/* Usuário */}
+          <div className="flex items-center gap-2 pl-1">
+            <div className="w-7 h-7 bg-blue-600 rounded-full flex items-center justify-center text-white font-bold text-xs flex-shrink-0">
               {userName.charAt(0).toUpperCase()}
             </div>
-            <span className="text-sm font-medium text-white hidden md:inline">{userName}</span>
+            <span className="text-sm font-medium text-slate-300 hidden md:inline max-w-[120px] truncate">{userName}</span>
           </div>
 
-          <button
-            onClick={onLogout}
-            className="flex items-center gap-2 px-3 py-2 rounded-lg text-red-400 hover:bg-red-950/50 hover:text-red-300 transition-all duration-200"
-            title="Sair"
-          >
+          {/* Logout */}
+          <button onClick={onLogout}
+            className="flex items-center gap-1.5 px-2.5 py-2 rounded-lg text-slate-400 hover:bg-red-950/60 hover:text-red-400 transition-colors">
             <LogOut className="w-4 h-4" />
             <span className="text-sm font-medium hidden sm:inline">Sair</span>
           </button>

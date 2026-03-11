@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { supabase, Message } from '../lib/supabase';
-import { MessageSquare, LogOut, Search, AlertCircle, CheckCheck, FileText, Download, User, Menu, X, Send, Paperclip, Image as ImageIcon, Mic, Play, Pause, Loader2, Briefcase, FolderTree, CircleUser as UserCircle2, Tag, Bell, XCircle, Info, ArrowRightLeft, Settings, Pin, Bot, CheckCircle2, FolderOpen, CreditCard, Plus, Edit2, Trash2, Phone } from 'lucide-react';
+import { MessageSquare, LogOut, Search, AlertCircle, CheckCheck, FileText, Download, User, Menu, X, Send, Paperclip, Image as ImageIcon, Mic, Play, Pause, Loader2, Briefcase, FolderTree, CircleUser as UserCircle2, Tag, Bell, XCircle, Info, ArrowRightLeft, Settings, Pin, Bot, CheckCircle2, FolderOpen, CreditCard, Plus, Edit2, Trash2 } from 'lucide-react';
 import DepartmentsManagement from './DepartmentsManagement';
 import SectorsManagement from './SectorsManagement';
 import AttendantsManagement from './AttendantsManagement';
@@ -294,7 +294,7 @@ export default function CompanyDashboard() {
   const [newContactPhone, setNewContactPhone] = useState('');
   const [addingContact, setAddingContact] = useState(false);
   const [showAllContactsModal, setShowAllContactsModal] = useState(false);
-  const [allContactsList, setAllContactsList] = useState<{ id: string; name: string; phone_number: string; last_message_time?: string; last_message?: string; ticket_status?: string }[]>([]);
+  const [allContactsList, setAllContactsList] = useState<{ id: string; name: string; phone_number: string; last_message_time?: string; ticket_status?: string }[]>([]);
   const [loadingAllContacts, setLoadingAllContacts] = useState(false);
   const [allContactsSearch, setAllContactsSearch] = useState('');
   const [pendingNewContact, setPendingNewContact] = useState<{ name: string; phone: string } | null>(null);
@@ -1809,35 +1809,30 @@ export default function CompanyDashboard() {
     }
   };
 
-  const loadAllContactsFromDB = useCallback(async (silent = false) => {
+  const loadAllContactsFromDB = async () => {
     if (!company?.id) return;
-    if (!silent) {
-      setAllContactsList([]);
-      setAllContactsSearch('');
-    }
-    setLoadingAllContacts(!silent);
+    setAllContactsList([]);
+    setAllContactsSearch('');
+    setLoadingAllContacts(true);
+
     try {
       const { data: contactsData, error } = await supabase
         .from('contacts')
-        .select('id, name, phone_number, last_message_time, last_message, ticket_status')
+        .select('id, name, phone_number, last_message_time, ticket_status')
         .eq('company_id', company.id)
         .order('last_message_time', { ascending: false });
+
       if (error) throw error;
+
+      console.log('📋 Contatos carregados da empresa:', company.id, contactsData?.length || 0);
       setAllContactsList(contactsData || []);
     } catch (err) {
       console.error('Erro ao carregar contatos:', err);
+      alert('❌ Erro ao carregar contatos do banco de dados');
     } finally {
       setLoadingAllContacts(false);
     }
-  }, [company?.id]);
-
-  // Auto-refresh da aba contatos
-  useEffect(() => {
-    if (activeTab !== 'contatos' || !company?.id) return;
-    loadAllContactsFromDB(false);
-    const interval = setInterval(() => loadAllContactsFromDB(true), 15000);
-    return () => clearInterval(interval);
-  }, [activeTab, company?.id, loadAllContactsFromDB]);
+  };
 
   const fetchWebhookContacts = async () => {
     setShowWebhookContactsModal(true);
@@ -3649,353 +3644,287 @@ export default function CompanyDashboard() {
               </div>
             </div>
           ) : activeTab === 'departamentos' ? (
-            <div className="flex-1 bg-gradient-to-br from-slate-50 via-blue-50/30 to-slate-50    overflow-y-auto">
+            <div key="departamentos" className="flex-1 bg-slate-50 overflow-y-auto animate-in fade-in slide-in-from-bottom-2 duration-200">
               <DepartmentsManagement />
             </div>
           ) : activeTab === 'setores' ? (
-            <div className="flex-1 bg-gradient-to-br from-slate-50 via-blue-50/30 to-slate-50    overflow-y-auto">
+            <div key="setores" className="flex-1 bg-slate-50 overflow-y-auto animate-in fade-in slide-in-from-bottom-2 duration-200">
               <SectorsManagement />
             </div>
           ) : activeTab === 'atendentes' ? (
-            <div className="flex-1 bg-gradient-to-br from-slate-50 via-blue-50/30 to-slate-50    overflow-y-auto">
+            <div key="atendentes" className="flex-1 bg-slate-50 overflow-y-auto animate-in fade-in slide-in-from-bottom-2 duration-200">
               <AttendantsManagement />
             </div>
           ) : activeTab === 'tags' ? (
-            <div className="flex-1 bg-gradient-to-br from-slate-50 via-blue-50/30 to-slate-50    overflow-y-auto">
+            <div key="tags" className="flex-1 bg-slate-50 overflow-y-auto animate-in fade-in slide-in-from-bottom-2 duration-200">
               <TagsManagement />
             </div>
           ) : activeTab === 'agente' ? (
-            <div className="flex-1 bg-gradient-to-br from-slate-50 via-blue-50/30 to-slate-50 overflow-y-auto">
+            <div key="agente" className="flex-1 bg-slate-50 overflow-y-auto animate-in fade-in slide-in-from-bottom-2 duration-200">
               <AgentConfig />
             </div>
           ) : activeTab === 'historico' ? (
-            <TicketHistory onOpenChat={handleOpenChatFromHistory} />
+            <div key="historico" className="flex-1 bg-slate-50 overflow-y-auto animate-in fade-in slide-in-from-bottom-2 duration-200">
+              <TicketHistory onOpenChat={handleOpenChatFromHistory} />
+            </div>
           ) : activeTab === 'meu-plano' ? (
-            <div className="flex-1 bg-gradient-to-br from-slate-50 via-blue-50/30 to-slate-50 overflow-y-auto">
+            <div key="meu-plano" className="flex-1 bg-slate-50 overflow-y-auto animate-in fade-in slide-in-from-bottom-2 duration-200">
               <MyPlan companyId={company?.id || ''} />
             </div>
           ) : activeTab === 'contatos' ? (
-          <div className="flex-1 bg-gradient-to-br from-slate-50 via-blue-50/30 to-slate-50 overflow-y-auto">
-            {(() => {
-              if (!company?.id) return (
-                <div className="flex flex-col items-center justify-center py-12 text-slate-400">
-                  <AlertCircle className="w-10 h-10 mb-3 opacity-40" />
-                  <p className="text-sm font-medium">Empresa não identificada</p>
-                </div>
-              );
-
-
-              const totalContatos = allContactsList.length;
-              const abertos = allContactsList.filter(c => c.ticket_status !== 'finalizado').length;
-              const fechados = totalContatos - abertos;
-
-              const filtered = allContactsSearch.trim()
-                ? allContactsList.filter(c =>
-                    (c.name || '').toLowerCase().includes(allContactsSearch.toLowerCase()) ||
-                    (c.phone_number || '').includes(allContactsSearch)
-                  )
-                : allContactsList;
-
-              return (
-                <div className="w-full p-6 space-y-6">
-
-                  {/* Header */}
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h2 className="text-2xl font-bold text-slate-900 tracking-tight">Contatos</h2>
-                      <p className="text-sm text-slate-500 mt-0.5">
-                        {loadingAllContacts ? 'Carregando...' : `${totalContatos} contato${totalContatos !== 1 ? 's' : ''} cadastrado${totalContatos !== 1 ? 's' : ''}`}
-                      </p>
+            <div key="contatos" className="flex-1 bg-slate-50 overflow-y-auto animate-in fade-in slide-in-from-bottom-2 duration-200">
+              {(() => {
+                if (company?.id) {
+                  if (allContactsList.length === 0 && !loadingAllContacts) {
+                    loadAllContactsFromDB();
+                  }
+                } else {
+                  return (
+                    <div className="flex flex-col items-center justify-center py-12 text-slate-400">
+                      <AlertCircle className="w-10 h-10 mb-3 opacity-40" />
+                      <p className="text-sm font-medium">Empresa não identificada</p>
                     </div>
-                    <button
-                      onClick={() => setShowAddContactModal(true)}
-                      className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-emerald-500 to-green-600 hover:from-emerald-600 hover:to-green-700 text-white rounded-xl font-semibold text-sm transition-all shadow-lg shadow-emerald-200 hover:shadow-xl hover:-translate-y-0.5 active:translate-y-0"
-                    >
-                      <Plus className="w-4 h-4" />
-                      Novo Contato
-                    </button>
-                  </div>
-
-                  {/* Stat Cards */}
-                  {!loadingAllContacts && totalContatos > 0 && (
-                    <div className="grid grid-cols-3 gap-4">
-                      <div className="bg-white rounded-2xl p-4 border border-slate-200 shadow-sm">
-                        <div className="flex items-center justify-between mb-3">
-                          <div className="w-9 h-9 bg-blue-50 rounded-xl flex items-center justify-center">
-                            <UserCircle2 className="w-4 h-4 text-blue-600" style={{ width: '18px', height: '18px' }} />
-                          </div>
-                          <span className="text-[11px] font-semibold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full">Total</span>
-                        </div>
-                        <p className="text-2xl font-bold text-slate-900">{totalContatos}</p>
-                        <p className="text-xs text-slate-500 mt-0.5">Todos os contatos</p>
-                      </div>
-                      <div className="bg-white rounded-2xl p-4 border border-slate-200 shadow-sm">
-                        <div className="flex items-center justify-between mb-3">
-                          <div className="w-9 h-9 bg-emerald-50 rounded-xl flex items-center justify-center">
-                            <CheckCircle2 className="w-4 h-4 text-emerald-600" style={{ width: '18px', height: '18px' }} />
-                          </div>
-                          <span className="text-[11px] font-semibold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">Abertos</span>
-                        </div>
-                        <p className="text-2xl font-bold text-slate-900">{abertos}</p>
-                        <p className="text-xs text-slate-500 mt-0.5">Chamados ativos</p>
-                      </div>
-                      <div className="bg-white rounded-2xl p-4 border border-slate-200 shadow-sm">
-                        <div className="flex items-center justify-between mb-3">
-                          <div className="w-9 h-9 bg-slate-100 rounded-xl flex items-center justify-center">
-                            <FolderOpen className="w-4 h-4 text-slate-500" style={{ width: '18px', height: '18px' }} />
-                          </div>
-                          <span className="text-[11px] font-semibold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full">Fechados</span>
-                        </div>
-                        <p className="text-2xl font-bold text-slate-900">{fechados}</p>
-                        <p className="text-xs text-slate-500 mt-0.5">Finalizados</p>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Search & List */}
-                  <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-
-                    {/* Search bar */}
-                    <div className="px-5 py-4 border-b border-slate-100 flex items-center gap-3">
-                      <div className="relative flex-1">
-                        <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                        <input
-                          type="text"
-                          value={allContactsSearch}
-                          onChange={(e) => setAllContactsSearch(e.target.value)}
-                          placeholder="Buscar por nome ou telefone..."
-                          className="w-full pl-10 pr-10 py-2.5 text-sm border border-slate-200 rounded-xl bg-slate-50 text-slate-900 placeholder-slate-400 focus:outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 focus:bg-white transition-all"
-                        />
-                        {allContactsSearch && (
-                          <button
-                            onClick={() => setAllContactsSearch('')}
-                            className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 flex items-center justify-center rounded-full bg-slate-300 hover:bg-slate-400 text-white transition-all"
-                          >
-                            <X className="w-3 h-3" />
-                          </button>
-                        )}
-                      </div>
-                      {!loadingAllContacts && allContactsSearch && (
-                        <span className="text-xs text-slate-500 whitespace-nowrap flex-shrink-0">
-                          {filtered.length} resultado{filtered.length !== 1 ? 's' : ''}
-                        </span>
-                      )}
-                    </div>
-
-                    {/* Content */}
-                    <div className="p-5">
-                      {loadingAllContacts ? (
-                        <div className="flex flex-col items-center justify-center py-16 gap-3">
-                          <div className="w-12 h-12 rounded-full border-4 border-slate-200 border-t-blue-500 animate-spin" />
-                          <p className="text-sm font-medium text-slate-500">Carregando contatos...</p>
-                        </div>
-                      ) : filtered.length === 0 ? (
-                        <div className="flex flex-col items-center justify-center py-16 text-center">
-                          <div className="w-20 h-20 bg-gradient-to-br from-slate-100 to-slate-200 rounded-3xl flex items-center justify-center mb-4 shadow-inner">
-                            <User className="w-9 h-9 text-slate-400" />
-                          </div>
-                          <p className="font-semibold text-slate-600 text-base">
-                            {allContactsSearch ? 'Nenhum resultado' : 'Sem contatos ainda'}
-                          </p>
-                          <p className="text-sm text-slate-400 mt-1 max-w-xs">
-                            {allContactsSearch
-                              ? `Nenhum contato corresponde a "${allContactsSearch}"`
-                              : 'Adicione o primeiro contato clicando em "Novo Contato"'}
-                          </p>
-                          {allContactsSearch && (
-                            <button
-                              onClick={() => setAllContactsSearch('')}
-                              className="mt-4 text-sm text-blue-600 hover:text-blue-700 font-medium"
-                            >
-                              Limpar busca
-                            </button>
-                          )}
-                        </div>
-                      ) : (
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                          {filtered.map((contact, idx) => {
-                            const initial = (contact.name || contact.phone_number || '?')[0].toUpperCase();
-                            const color = getAvatarColor(contact.name || contact.phone_number || '');
-                            const lastMsgTime = contact.last_message_time ? formatDate(contact.last_message_time) : null;
-                            const isTicketOpen = contact.ticket_status !== 'finalizado';
-                            const cleanPhone = (contact.phone_number || '').replace('@s.whatsapp.net', '').replace('@g.us', '');
-                            const dbContact = contactsDB.find(c => c.id === contact.id);
-                            const deptName = departments.find(d => d.id === dbContact?.department_id)?.name;
-
-                            return (
-                              <div
-                                key={contact.id}
-                                className="group relative bg-white border border-slate-200/80 rounded-2xl p-5 hover:shadow-lg hover:border-blue-200 transition-all duration-200 hover:-translate-y-0.5 cursor-pointer overflow-hidden"
-                                onClick={() => {
-                                  const normalizedPhone = normalizePhone(contact.phone_number);
-                                  setSelectedContact(normalizedPhone);
-                                  setPendingNewContact({ name: contact.name || '', phone: normalizedPhone });
-                                  setActiveTab('mensagens');
-                                  if (window.innerWidth < 768) setSidebarOpen(false);
-                                }}
-                              >
-                                {/* Hover accent line */}
-                                <div className="absolute inset-x-0 top-0 h-0.5 bg-gradient-to-r from-blue-400 via-sky-400 to-blue-500 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-
-                                {/* Avatar + Actions */}
-                                <div className="flex items-start justify-between mb-4">
-                                  <div className={`w-12 h-12 bg-gradient-to-br ${color} rounded-xl flex items-center justify-center text-white font-bold text-lg shadow-sm flex-shrink-0`}>
-                                    {initial}
-                                  </div>
-                                  <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-all duration-200 -translate-y-1 group-hover:translate-y-0">
-                                    <button
-                                      onClick={(e) => { e.stopPropagation(); handleEditContact(contact); }}
-                                      className="w-8 h-8 flex items-center justify-center rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-all"
-                                      title="Editar"
-                                    >
-                                      <Edit2 className="w-3.5 h-3.5" />
-                                    </button>
-                                    <button
-                                      onClick={(e) => { e.stopPropagation(); handleOpenDeleteModal(contact); }}
-                                      className="w-8 h-8 flex items-center justify-center rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 transition-all"
-                                      title="Excluir"
-                                    >
-                                      <Trash2 className="w-3.5 h-3.5" />
-                                    </button>
-                                  </div>
-                                </div>
-
-                                {/* Name */}
-                                <h3 className="font-bold text-slate-900 text-sm leading-snug mb-1 truncate pr-2">
-                                  {contact.name || <span className="text-slate-400 italic font-normal text-sm">Sem nome</span>}
-                                </h3>
-
-                                {/* Phone */}
-                                <div className="flex items-center gap-1.5 mb-3">
-                                  <Phone className="w-3 h-3 text-slate-400 flex-shrink-0" />
-                                  <span className="text-xs text-slate-500 font-mono truncate">{cleanPhone || '—'}</span>
-                                </div>
-
-                                {/* Department badge */}
-                                <div className="flex flex-wrap gap-1.5 mb-1 min-h-[22px]">
-                                  {deptName && (
-                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-indigo-50 text-indigo-700 text-[10px] font-semibold rounded-full border border-indigo-100">
-                                      <Briefcase className="w-2.5 h-2.5" />
-                                      {deptName}
-                                    </span>
-                                  )}
-                                </div>
-
-                                {/* Last message */}
-                                {contact.last_message && (
-                                  <p className="text-[11px] text-slate-400 truncate mt-2 leading-relaxed">
-                                    {contact.last_message}
-                                  </p>
-                                )}
-
-                                {/* Footer */}
-                                <div className="mt-3 pt-3 border-t border-slate-100 flex items-center justify-between gap-2">
-                                  <span className="text-[11px] text-slate-400 truncate">
-                                    {lastMsgTime || 'Sem mensagens'}
-                                  </span>
-                                  {isTicketOpen ? (
-                                    <span className="flex-shrink-0 inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-500 text-white shadow-sm shadow-emerald-100">
-                                      <span className="w-1.5 h-1.5 rounded-full bg-white/80 animate-pulse" />
-                                      Aberto
-                                    </span>
-                                  ) : (
-                                    <span className="flex-shrink-0 inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-slate-100 text-slate-500">
-                                      <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
-                                      Fechado
-                                    </span>
-                                  )}
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Footer count */}
-                    {!loadingAllContacts && filtered.length > 0 && (
-                      <div className="px-5 py-3 bg-slate-50 border-t border-slate-100 text-center">
-                        <p className="text-xs text-slate-400">
-                          Exibindo {filtered.length} de {totalContatos} contato{totalContatos !== 1 ? 's' : ''}
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              );
-            })()}
-
-            {/* Modal Edição */}
-            {isEditModalOpen && (
-              <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
-                <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in duration-200">
-                  <div className="bg-gradient-to-r from-blue-500 to-blue-600 px-6 py-5 text-white">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center">
-                          <Edit2 className="w-5 h-5" />
-                        </div>
-                        <div>
-                          <h3 className="text-lg font-bold">Editar Contato</h3>
-                          <p className="text-blue-100 text-xs">Atualize nome ou número</p>
-                        </div>
-                      </div>
-                      <button onClick={handleCloseEditModal} className="w-8 h-8 flex items-center justify-center rounded-full bg-white/10 hover:bg-white/20 text-white transition-all">
-                        <X className="w-4 h-4" />
+                  );
+                }
+                return (
+                  <div className="w-full p-6">
+                    <div className="mb-6 flex items-center justify-between">
+                      <h2 className="text-3xl font-bold text-slate-900 dark:text-white">Contatos</h2>
+                      <button
+                        onClick={() => setShowAddContactModal(true)}
+                        className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white rounded-lg font-semibold transition-all shadow-md hover:shadow-lg"
+                      >
+                        <Plus className="w-5 h-5" />
+                        Adicionar
                       </button>
                     </div>
-                  </div>
-                  <div className="p-6 space-y-4">
-                    <div>
-                      <label className="block text-sm font-semibold text-slate-700 mb-1.5">Nome</label>
-                      <input
-                        type="text"
-                        value={editingName}
-                        onChange={(e) => setEditingName(e.target.value)}
-                        placeholder="Nome do contato"
-                        className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 transition-all bg-slate-50 focus:bg-white"
-                        autoFocus
-                        onKeyDown={(e) => e.key === 'Enter' && handleSaveContactEdit()}
-                      />
+
+                    <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
+                      <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-700">
+                        <div className="relative">
+                          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                          <input
+                            type="text"
+                            value={allContactsSearch}
+                            onChange={(e) => setAllContactsSearch(e.target.value)}
+                            placeholder="Buscar por nome ou telefone..."
+                            className="w-full pl-10 pr-4 py-2.5 border border-slate-200 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-900 text-gray-900 dark:text-white focus:outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-900 transition-all"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="p-6">
+                        {loadingAllContacts ? (
+                          <div className="flex flex-col items-center justify-center py-12 text-slate-400">
+                            <Loader2 className="w-8 h-8 animate-spin mb-3 text-blue-500" />
+                            <p className="text-sm font-medium">Carregando contatos...</p>
+                          </div>
+                        ) : (() => {
+                          const filtered = allContactsSearch.trim()
+                            ? allContactsList.filter((contact) =>
+                                (contact.name || '').toLowerCase().includes(allContactsSearch.toLowerCase()) ||
+                                (contact.phone_number || '').includes(allContactsSearch)
+                              )
+                            : allContactsList;
+
+                          if (filtered.length === 0) {
+                            return (
+                              <div className="flex flex-col items-center justify-center py-12 text-slate-400">
+                                <User className="w-10 h-10 mb-3 opacity-40" />
+                                <p className="text-sm font-medium">Nenhum contato encontrado</p>
+                                <p className="text-xs mt-1">Procure por contatos ou adicione um novo</p>
+                              </div>
+                            );
+                          }
+
+                          return (
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                              {filtered.map((contact) => {
+                                const initial = (contact.name || contact.phone_number || '?')[0].toUpperCase();
+                                const color = getAvatarColor(contact.name || contact.phone_number || '');
+                                const lastMessageTime = contact.last_message_time ? formatDate(contact.last_message_time) : 'Sem mensagens';
+                                const isTicketOpen = contact.ticket_status !== 'finalizado';
+                                const cleanPhone = (contact.phone_number || '').replace('@s.whatsapp.net', '').replace('@g.us', '');
+
+                                return (
+                                  <div
+                                    key={contact.id}
+                                    className="bg-white/70 dark:bg-slate-900 backdrop-blur-xl border border-gray-200/50 dark:border-slate-600 rounded-2xl p-6 shadow-md hover:shadow-lg transition-all group hover:-translate-y-1 cursor-pointer"
+                                    onClick={() => {
+                                      const normalizedPhone = normalizePhone(contact.phone_number);
+                                      setSelectedContact(normalizedPhone);
+                                      setPendingNewContact({ 
+                                        name: contact.name || '', 
+                                        phone: normalizedPhone 
+                                      });
+                                      setActiveTab('mensagens');
+                                      if (window.innerWidth < 768) setSidebarOpen(false);
+                                    }}
+                                  >
+                                    {/* Avatar + Actions */}
+                                    <div className="flex justify-between mb-3">
+                                      <div 
+                                        className={`w-14 h-14 bg-gradient-to-br ${color} rounded-xl flex items-center justify-center shadow-md text-white font-semibold text-lg`}
+                                      >
+                                        {initial}
+                                      </div>
+
+                                      <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                        <button 
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleEditContact(contact);
+                                          }}
+                                          className="p-2 text-gray-400 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-500/20 rounded-lg transition-all"
+                                          title="Editar contato"
+                                        >
+                                          <Edit2 className="w-4 h-4" />
+                                        </button>
+                                        <button 
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleOpenDeleteModal(contact);
+                                          }}
+                                          className="p-2 text-gray-400 dark:text-slate-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/20 rounded-lg transition-all"
+                                          title="Deletar contato"
+                                        >
+                                          <Trash2 className="w-4 h-4" />
+                                        </button>
+                                      </div>
+                                    </div>
+
+                                    {/* Nome */}
+                                    <h3 className="font-bold text-gray-900 dark:text-white">
+                                      {contact.name || 'Sem nome'}
+                                    </h3>
+
+                                    {/* Número */}
+                                    <p className="text-sm text-gray-600 dark:text-slate-300 mt-1">
+                                      {cleanPhone || 'Sem número'}
+                                    </p>
+
+                                    {/* Última Mensagem (opcional) */}
+                                    {contact.last_message && (
+                                      <p className="text-xs text-gray-600 dark:text-slate-400 mt-2 line-clamp-2">
+                                        {contact.last_message}
+                                      </p>
+                                    )}
+
+                                    {/* Data + Status */}
+                                    <div className="mt-4 pt-3 border-t border-gray-100 dark:border-slate-700 flex items-center justify-between text-xs">
+                                      <p className="text-gray-400 dark:text-slate-500">
+                                        {lastMessageTime}
+                                      </p>
+                                      {isTicketOpen ? (
+                                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-emerald-500 text-white">
+                                          <span className="w-1.5 h-1.5 rounded-full bg-white/80" />
+                                          Aberto
+                                        </span>
+                                      ) : (
+                                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-slate-200 dark:bg-slate-600 text-slate-600 dark:text-slate-200">
+                                          <span className="w-1.5 h-1.5 rounded-full bg-slate-400 dark:bg-slate-400" />
+                                          Fechado
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          );
+                        })()}
+                      </div>
                     </div>
-                    <div>
-                      <label className="block text-sm font-semibold text-slate-700 mb-1.5">Número</label>
-                      <div className="relative">
-                        <Phone className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+
+                    {!loadingAllContacts && allContactsList.length > 0 && (
+                      <p className="text-center text-sm text-slate-500 mt-4">
+                        Total de {allContactsList.length} contato{allContactsList.length !== 1 ? 's' : ''}
+                      </p>
+                    )}
+                  </div>
+                );
+              })()}
+
+              {/* Modal de Edição de Contato */}
+              {isEditModalOpen && (
+                <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
+                  <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-md p-6 animate-in zoom-in duration-200">
+                    <div className="flex justify-between items-center mb-4">
+                      <h3 className="text-xl font-bold text-gray-900 dark:text-white">Editar Contato</h3>
+                      <button 
+                        onClick={handleCloseEditModal}
+                        className="text-gray-400 hover:text-gray-600 dark:hover:text-slate-300"
+                      >
+                        <X className="w-5 h-5" />
+                      </button>
+                    </div>
+
+                    <div className="space-y-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-slate-200 mb-2">
+                          Nome
+                        </label>
+                        <input
+                          type="text"
+                          value={editingName}
+                          onChange={(e) => setEditingName(e.target.value)}
+                          placeholder="Digite o nome"
+                          className="w-full px-4 py-2 border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400"
+                          autoFocus
+                          onKeyDown={(e) => e.key === 'Enter' && handleSaveContactEdit()}
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-slate-200 mb-2">
+                          Número
+                        </label>
                         <input
                           type="text"
                           value={editingPhone}
                           onChange={(e) => setEditingPhone(e.target.value)}
-                          placeholder="Número do contato"
-                          className="w-full pl-10 pr-4 py-3 border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 transition-all bg-slate-50 focus:bg-white font-mono"
+                          placeholder="Digite o número"
+                          className="w-full px-4 py-2 border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 font-mono"
                           onKeyDown={(e) => e.key === 'Enter' && handleSaveContactEdit()}
                         />
                       </div>
                     </div>
-                    <div className="flex gap-3 pt-2">
-                      <button onClick={handleCloseEditModal} className="flex-1 px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl transition-all text-sm font-semibold">Cancelar</button>
-                      <button onClick={handleSaveContactEdit} className="flex-1 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl transition-all text-sm font-semibold shadow-sm">Salvar alterações</button>
+
+                    <div className="flex gap-3 mt-6">
+                      <button
+                        onClick={handleSaveContactEdit}
+                        className="flex-1 px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg transition-colors font-semibold"
+                      >
+                        Salvar
+                      </button>
+                      <button
+                        onClick={handleCloseEditModal}
+                        className="flex-1 px-4 py-2 bg-gray-200 dark:bg-slate-700 hover:bg-gray-300 dark:hover:bg-slate-600 text-gray-700 dark:text-white rounded-lg transition-colors font-semibold"
+                      >
+                        Cancelar
+                      </button>
                     </div>
                   </div>
                 </div>
-              </div>
-            )}
+              )}
 
-            {/* Modal Exclusão */}
-            <Modal
-              isOpen={deleteModal.isOpen}
-              onClose={handleCloseDeleteModal}
-              onConfirm={handleDeleteContact}
-              title="Excluir Contato"
-              message={`Tem certeza que deseja excluir o contato "${deleteModal.contact?.name}"?\n\nTodas as mensagens e dados serão removidos permanentemente. Esta ação não pode ser desfeita.`}
-              confirmText="Excluir"
-              cancelText="Cancelar"
-              confirmColor="red"
-              loading={isDeletingContact}
-            />
-          </div>
+              {/* Modal de Exclusão de Contato */}
+              <Modal
+                isOpen={deleteModal.isOpen}
+                onClose={handleCloseDeleteModal}
+                onConfirm={handleDeleteContact}
+                title="Excluir Contato"
+                message={`Tem certeza que deseja excluir o contato "${deleteModal.contact?.name}"?\n\nTodas as mensagens e dados serão removidos permanentemente. Esta ação não pode ser desfeita.`}
+                confirmText="Excluir"
+                cancelText="Cancelar"
+                confirmColor="red"
+                loading={isDeletingContact}
+              />
+            </div>
           ) : activeTab === 'configuracoes' ? (
-            <SettingsPage />
+            <div key="configuracoes" className="flex-1 animate-in fade-in slide-in-from-bottom-2 duration-200">
+              <SettingsPage />
+            </div>
           ) : null}
         </div>
       </div>

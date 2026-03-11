@@ -1,527 +1,216 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
-import { CheckCircle2, Clock, AlertCircle, User, Calendar, Phone, FolderOpen, MessageCircle, Eye, ArrowRight } from 'lucide-react';
+import { CheckCircle2, Clock, AlertCircle, User, Phone, MessageCircle, Eye, ArrowRight, FolderOpen, Loader2, RefreshCw } from 'lucide-react';
 import Toast from './Toast';
 
 interface TicketContact {
-  id: string;
-  phone_number: string;
-  name: string;
+  id: string; phone_number: string; name: string;
   ticket_status: 'aberto' | 'em_processo' | 'finalizado';
-  ticket_opened_at: string;
-  ticket_closed_at: string | null;
-  ticket_closed_by: string | null;
-  department_id: string | null;
-  department_name?: string;
-  closed_by_name?: string;
-  message_count?: number;
+  ticket_opened_at: string; ticket_closed_at: string | null; ticket_closed_by: string | null;
+  department_id: string | null; department_name?: string; closed_by_name?: string; message_count?: number;
 }
 
-interface TicketHistoryProps {
-  onOpenChat?: (phoneNumber: string) => void;
-}
+interface TicketHistoryProps { onOpenChat?: (phone: string) => void; }
+
+type FilterType = 'todos' | 'aberto' | 'em_processo' | 'finalizado';
+
+const STATUS = {
+  aberto:      { label: 'Aberto',     color: 'bg-red-100 text-red-700 dark:bg-red-500/15 dark:text-red-400',    dot: 'bg-red-500',    icon: AlertCircle  },
+  em_processo: { label: 'Em processo',color: 'bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-400', dot: 'bg-amber-500', icon: Clock },
+  finalizado:  { label: 'Finalizado', color: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400', dot: 'bg-emerald-500', icon: CheckCircle2 },
+};
+
+function fmtDate(d: string) { return new Date(d).toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' }); }
+function fmtPhone(p: string) { const c = p.replace(/\D/g,''); if(c.length===13) return `+${c.slice(0,2)} (${c.slice(2,4)}) ${c.slice(4,9)}-${c.slice(9)}`; return p; }
+function duration(a: string, b: string|null) { const d=(b?new Date(b):new Date()).getTime()-new Date(a).getTime(), h=Math.floor(d/3600000), m=Math.floor((d%3600000)/60000); if(h>24){const days=Math.floor(h/24);return`${days}d ${h%24}h`;}if(h>0)return`${h}h ${m}m`;return`${m}m`; }
 
 export default function TicketHistory({ onOpenChat }: TicketHistoryProps = {}) {
   const { company, attendant } = useAuth();
   const [tickets, setTickets] = useState<TicketContact[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filterStatus, setFilterStatus] = useState<'todos' | 'aberto' | 'em_processo' | 'finalizado'>('todos');
-  const [showToast, setShowToast] = useState(false);
-  const [toastMessage, setToastMessage] = useState('');
-  const [selectedTicket, setSelectedTicket] = useState<TicketContact | null>(null);
-  const [showDetailsModal, setShowDetailsModal] = useState(false);
+  const [filter, setFilter] = useState<FilterType>('todos');
+  const [toast, setToast] = useState('');
+  const [selected, setSelected] = useState<TicketContact | null>(null);
 
-  useEffect(() => {
-    fetchTickets();
-  }, [company?.id, attendant?.company_id]);
+  useEffect(() => { fetchTickets(); }, [company?.id, attendant?.company_id]);
 
   const fetchTickets = async () => {
     try {
       setLoading(true);
-      const companyId = company?.id || attendant?.company_id;
-
-      if (!companyId) return;
-
-      const { data, error } = await supabase
-        .from('contacts')
-        .select(`
-          id,
-          phone_number,
-          name,
-          ticket_status,
-          ticket_opened_at,
-          ticket_closed_at,
-          ticket_closed_by,
-          department_id,
-          departments(name)
-        `)
-        .eq('company_id', companyId)
-        .order('ticket_opened_at', { ascending: false });
-
+      const cid = company?.id || attendant?.company_id; if (!cid) return;
+      const { data, error } = await supabase.from('contacts').select(`id,phone_number,name,ticket_status,ticket_opened_at,ticket_closed_at,ticket_closed_by,department_id,departments(name)`).eq('company_id', cid).order('ticket_opened_at', { ascending: false });
       if (error) throw error;
-
-      const ticketsWithNames = await Promise.all(
-        (data || []).map(async (ticket) => {
-          let closedByName = null;
-
-          if (ticket.ticket_closed_by) {
-            const { data: attendantData } = await supabase
-              .from('attendants')
-              .select('name')
-              .eq('user_id', ticket.ticket_closed_by)
-              .maybeSingle();
-
-            if (attendantData) {
-              closedByName = attendantData.name;
-            } else {
-              const { data: companyData } = await supabase
-                .from('companies')
-                .select('name')
-                .eq('user_id', ticket.ticket_closed_by)
-                .maybeSingle();
-
-              if (companyData) {
-                closedByName = companyData.name;
-              }
-            }
-          }
-
-          const { count } = await supabase
-            .from('messages')
-            .select('*', { count: 'exact', head: true })
-            .eq('company_id', companyId)
-            .eq('phone_number', ticket.phone_number);
-
-          return {
-            ...ticket,
-            department_name: ticket.departments?.name,
-            closed_by_name: closedByName,
-            message_count: count || 0,
-          };
-        })
-      );
-
-      setTickets(ticketsWithNames as any);
-    } catch (error) {
-      console.error('Erro ao buscar histórico:', error);
-    } finally {
-      setLoading(false);
-    }
+      const enriched = await Promise.all((data || []).map(async t => {
+        let closedByName = null;
+        if (t.ticket_closed_by) {
+          const { data: att } = await supabase.from('attendants').select('name').eq('user_id', t.ticket_closed_by).maybeSingle();
+          if (att) closedByName = att.name;
+          else { const { data: co } = await supabase.from('companies').select('name').eq('user_id', t.ticket_closed_by).maybeSingle(); if(co) closedByName = co.name; }
+        }
+        const { count } = await supabase.from('messages').select('*', { count: 'exact', head: true }).eq('company_id', cid).eq('phone_number', t.phone_number);
+        return { ...t, department_name: (t as any).departments?.name, closed_by_name: closedByName, message_count: count || 0 };
+      }));
+      setTickets(enriched as any);
+    } catch (e) { console.error(e); } finally { setLoading(false); }
   };
 
-  const handleFinishTicket = async (ticketId: string) => {
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-
-      const { error } = await supabase
-        .from('contacts')
-        .update({
-          ticket_status: 'finalizado',
-          ticket_closed_at: new Date().toISOString(),
-          ticket_closed_by: user.id,
-        })
-        .eq('id', ticketId);
-
-      if (error) throw error;
-
-      setToastMessage('Chamado finalizado com sucesso!');
-      setShowToast(true);
-      fetchTickets();
-    } catch (error) {
-      console.error('Erro ao finalizar chamado:', error);
-      setToastMessage('Erro ao finalizar chamado');
-      setShowToast(true);
-    }
+  const finish = async (id: string) => {
+    const { data: { user } } = await supabase.auth.getUser(); if (!user) return;
+    await supabase.from('contacts').update({ ticket_status: 'finalizado', ticket_closed_at: new Date().toISOString(), ticket_closed_by: user.id }).eq('id', id);
+    setToast('Chamado finalizado!'); setSelected(null); fetchTickets();
+  };
+  const reopen = async (id: string) => {
+    await supabase.from('contacts').update({ ticket_status: 'aberto', ticket_closed_at: null, ticket_closed_by: null }).eq('id', id);
+    setToast('Chamado reaberto!'); setSelected(null); fetchTickets();
   };
 
-  const handleReopenTicket = async (ticketId: string) => {
-    try {
-      const { error } = await supabase
-        .from('contacts')
-        .update({
-          ticket_status: 'aberto',
-          ticket_closed_at: null,
-          ticket_closed_by: null,
-        })
-        .eq('id', ticketId);
+  const counts = { todos: tickets.length, aberto: tickets.filter(t => t.ticket_status === 'aberto').length, em_processo: tickets.filter(t => t.ticket_status === 'em_processo').length, finalizado: tickets.filter(t => t.ticket_status === 'finalizado').length };
+  const filtered = filter === 'todos' ? tickets : tickets.filter(t => t.ticket_status === filter);
 
-      if (error) throw error;
-
-      setToastMessage('Chamado reaberto com sucesso!');
-      setShowToast(true);
-      fetchTickets();
-    } catch (error) {
-      console.error('Erro ao reabrir chamado:', error);
-      setToastMessage('Erro ao reabrir chamado');
-      setShowToast(true);
-    }
-  };
-
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleString('pt-BR', {
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-  };
-
-  const formatPhone = (phone: string) => {
-    const cleaned = phone.replace(/\D/g, '');
-    if (cleaned.length === 13) {
-      return `+${cleaned.slice(0, 2)} (${cleaned.slice(2, 4)}) ${cleaned.slice(4, 9)}-${cleaned.slice(9)}`;
-    }
-    return phone;
-  };
-
-  const calculateDuration = (openedAt: string, closedAt: string | null) => {
-    const start = new Date(openedAt);
-    const end = closedAt ? new Date(closedAt) : new Date();
-    const diffMs = end.getTime() - start.getTime();
-
-    const hours = Math.floor(diffMs / (1000 * 60 * 60));
-    const minutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
-
-    if (hours > 24) {
-      const days = Math.floor(hours / 24);
-      return `${days}d ${hours % 24}h`;
-    }
-    if (hours > 0) {
-      return `${hours}h ${minutes}m`;
-    }
-    return `${minutes}m`;
-  };
-
-  const handleOpenChat = (phoneNumber: string) => {
-    if (onOpenChat) {
-      onOpenChat(phoneNumber);
-    }
-  };
-
-  const handleViewDetails = (ticket: TicketContact) => {
-    setSelectedTicket(ticket);
-    setShowDetailsModal(true);
-  };
-
-  const getStatusBadge = (status: string) => {
-    switch (status) {
-      case 'aberto':
-        return (
-          <span className="inline-flex items-center gap-1 px-3 py-1 bg-red-100 text-red-700 rounded-full text-sm font-medium">
-            <AlertCircle className="w-4 h-4" />
-            Aberto
-          </span>
-        );
-      case 'em_processo':
-        return (
-          <span className="inline-flex items-center gap-1 px-3 py-1 bg-yellow-100 text-yellow-700 rounded-full text-sm font-medium">
-            <Clock className="w-4 h-4" />
-            Em Processo
-          </span>
-        );
-      case 'finalizado':
-        return (
-          <span className="inline-flex items-center gap-1 px-3 py-1 bg-green-100 text-green-700 rounded-full text-sm font-medium">
-            <CheckCircle2 className="w-4 h-4" />
-            Finalizado
-          </span>
-        );
-      default:
-        return null;
-    }
-  };
-
-  const filteredTickets = tickets.filter((ticket) => {
-    if (filterStatus === 'todos') return true;
-    return ticket.ticket_status === filterStatus;
-  });
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-full">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto"></div>
-          <p className="mt-4 text-slate-600">Carregando histórico...</p>
-        </div>
-      </div>
-    );
-  }
+  const filterBtns: { key: FilterType; label: string; countColor: string }[] = [
+    { key: 'todos',      label: 'Todos',       countColor: 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300' },
+    { key: 'aberto',     label: 'Abertos',     countColor: 'bg-red-100 dark:bg-red-500/20 text-red-600 dark:text-red-400' },
+    { key: 'em_processo',label: 'Em processo', countColor: 'bg-amber-100 dark:bg-amber-500/20 text-amber-600 dark:text-amber-400' },
+    { key: 'finalizado', label: 'Finalizados', countColor: 'bg-emerald-100 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400' },
+  ];
 
   return (
-    <div className="flex-1 overflow-y-auto bg-gradient-to-br from-slate-50 to-blue-50 p-8">
-      <div className="max-w-7xl mx-auto space-y-6">
-        <div className="animate-fadeIn">
-          <h1 className="text-3xl font-bold text-slate-900 mb-2">Histórico de Chamados</h1>
-          <p className="text-slate-600">Acompanhe o status de todos os atendimentos</p>
+    <div className="p-6 w-full">
+      <div className="max-w-5xl mx-auto">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h2 className="text-xl font-semibold text-slate-900 dark:text-white">Histórico de Chamados</h2>
+          <p className="text-sm text-slate-500 mt-0.5">Acompanhe todos os atendimentos</p>
         </div>
-
-        <div className="flex gap-3 animate-slideUp">
-          <button
-            onClick={() => setFilterStatus('todos')}
-            className={`px-4 py-2 rounded-lg font-medium text-sm transition-all ${
-              filterStatus === 'todos'
-                ? 'bg-blue-500 text-white shadow-lg'
-                : 'bg-white text-slate-600 hover:bg-slate-50'
-            }`}
-          >
-            Todos ({tickets.length})
-          </button>
-          <button
-            onClick={() => setFilterStatus('aberto')}
-            className={`px-4 py-2 rounded-lg font-medium text-sm transition-all ${
-              filterStatus === 'aberto'
-                ? 'bg-red-500 text-white shadow-lg'
-                : 'bg-white text-slate-600 hover:bg-slate-50'
-            }`}
-          >
-            Abertos ({tickets.filter((t) => t.ticket_status === 'aberto').length})
-          </button>
-          <button
-            onClick={() => setFilterStatus('em_processo')}
-            className={`px-4 py-2 rounded-lg font-medium text-sm transition-all ${
-              filterStatus === 'em_processo'
-                ? 'bg-yellow-500 text-white shadow-lg'
-                : 'bg-white text-slate-600 hover:bg-slate-50'
-            }`}
-          >
-            Em Processo ({tickets.filter((t) => t.ticket_status === 'em_processo').length})
-          </button>
-          <button
-            onClick={() => setFilterStatus('finalizado')}
-            className={`px-4 py-2 rounded-lg font-medium text-sm transition-all ${
-              filterStatus === 'finalizado'
-                ? 'bg-green-500 text-white shadow-lg'
-                : 'bg-white text-slate-600 hover:bg-slate-50'
-            }`}
-          >
-            Finalizados ({tickets.filter((t) => t.ticket_status === 'finalizado').length})
-          </button>
-        </div>
-
-        <div className="bg-white rounded-2xl shadow-lg border border-slate-200 overflow-hidden animate-slideUp" style={{ animationDelay: '0.1s' }}>
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-slate-50 border-b border-slate-200">
-                <tr>
-                  <th className="px-6 py-4 text-left text-sm font-semibold text-slate-700">Contato</th>
-                  <th className="px-6 py-4 text-left text-sm font-semibold text-slate-700">Telefone</th>
-                  <th className="px-6 py-4 text-left text-sm font-semibold text-slate-700">Status</th>
-                  <th className="px-6 py-4 text-left text-sm font-semibold text-slate-700">Resumo</th>
-                  <th className="px-6 py-4 text-left text-sm font-semibold text-slate-700">Duração</th>
-                  <th className="px-6 py-4 text-center text-sm font-semibold text-slate-700">Ações</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {filteredTickets.length === 0 ? (
-                  <tr>
-                    <td colSpan={6} className="px-6 py-12 text-center text-slate-500">
-                      Nenhum chamado encontrado
-                    </td>
-                  </tr>
-                ) : (
-                  filteredTickets.map((ticket) => (
-                    <tr key={ticket.id} className="hover:bg-slate-50 transition-colors">
-                      <td className="px-6 py-4">
-                        <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-blue-600 rounded-full flex items-center justify-center text-white font-semibold">
-                            {ticket.name ? ticket.name[0].toUpperCase() : <User className="w-5 h-5" />}
-                          </div>
-                          <div>
-                            <div className="font-medium text-slate-900">{ticket.name || 'Sem nome'}</div>
-                            <div className="text-xs text-slate-500">{ticket.department_name || 'Sem departamento'}</div>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="flex items-center gap-2 text-slate-600">
-                          <Phone className="w-4 h-4" />
-                          <span className="font-mono text-sm">{formatPhone(ticket.phone_number)}</span>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4">{getStatusBadge(ticket.ticket_status)}</td>
-                      <td className="px-6 py-4">
-                        <div className="space-y-1">
-                          <div className="flex items-center gap-2 text-sm text-slate-600">
-                            <MessageCircle className="w-4 h-4 text-blue-500" />
-                            <span className="font-medium">{ticket.message_count || 0}</span>
-                            <span className="text-slate-500">mensagens</span>
-                          </div>
-                          {ticket.closed_by_name && (
-                            <div className="flex items-center gap-2 text-xs text-slate-500">
-                              <User className="w-3 h-3" />
-                              Atendido por {ticket.closed_by_name}
-                            </div>
-                          )}
-                        </div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="flex items-center gap-2 text-slate-600">
-                          <Clock className="w-4 h-4" />
-                          <span className="text-sm font-medium">
-                            {calculateDuration(ticket.ticket_opened_at, ticket.ticket_closed_at)}
-                          </span>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="flex items-center justify-center gap-2">
-                          <button
-                            onClick={() => handleViewDetails(ticket)}
-                            className="px-3 py-2 bg-blue-50 text-blue-600 rounded-lg text-sm font-medium hover:bg-blue-100 transition-colors flex items-center gap-2"
-                            title="Ver detalhes"
-                          >
-                            <Eye className="w-4 h-4" />
-                          </button>
-                          {onOpenChat && (
-                            <button
-                              onClick={() => handleOpenChat(ticket.phone_number)}
-                              className="px-3 py-2 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-lg text-sm font-medium hover:from-blue-600 hover:to-blue-700 transition-all flex items-center gap-2"
-                              title="Abrir chat"
-                            >
-                              <MessageCircle className="w-4 h-4" />
-                              <ArrowRight className="w-4 h-4" />
-                            </button>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
+        <button onClick={fetchTickets} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors" title="Atualizar">
+          <RefreshCw className="w-4 h-4" />
+        </button>
       </div>
 
-      {showDetailsModal && selectedTicket && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setShowDetailsModal(false)}>
-          <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-            <div className="p-6 border-b border-slate-200">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                  <div className="w-16 h-16 bg-gradient-to-br from-blue-500 to-blue-600 rounded-full flex items-center justify-center text-white text-2xl font-bold">
-                    {selectedTicket.name ? selectedTicket.name[0].toUpperCase() : <User className="w-8 h-8" />}
-                  </div>
-                  <div>
-                    <h2 className="text-2xl font-bold text-slate-900">{selectedTicket.name || 'Sem nome'}</h2>
-                    <p className="text-slate-600 flex items-center gap-2 mt-1">
-                      <Phone className="w-4 h-4" />
-                      {formatPhone(selectedTicket.phone_number)}
-                    </p>
-                  </div>
+      {/* Filtros */}
+      <div className="flex flex-wrap gap-2 mb-5">
+        {filterBtns.map(f => (
+          <button key={f.key} onClick={() => setFilter(f.key)}
+            className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${filter === f.key ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-900' : 'bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:border-slate-300'}`}>
+            {f.label}
+            <span className={`text-xs font-bold px-1.5 py-0.5 rounded-md ${filter === f.key ? 'bg-white/20 dark:bg-black/20 text-white dark:text-slate-900' : f.countColor}`}>
+              {counts[f.key]}
+            </span>
+          </button>
+        ))}
+      </div>
+
+      {/* Tabela */}
+      {loading ? (
+        <div className="flex items-center justify-center py-16"><Loader2 className="w-5 h-5 animate-spin text-slate-400" /></div>
+      ) : (
+        <div className="border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden">
+          <table className="w-full">
+            <thead>
+              <tr className="bg-slate-50 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-700">
+                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">Contato</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide hidden sm:table-cell">Telefone</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">Status</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide hidden md:table-cell">Msgs</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide hidden lg:table-cell">Duração</th>
+                <th className="px-4 py-3 w-20 text-right text-xs font-semibold text-slate-500 uppercase tracking-wide">Ações</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 dark:divide-slate-700/50 bg-white dark:bg-slate-900">
+              {filtered.length === 0 ? (
+                <tr><td colSpan={6} className="px-4 py-12 text-center text-sm text-slate-400">Nenhum chamado encontrado</td></tr>
+              ) : filtered.map(t => {
+                const st = STATUS[t.ticket_status] || STATUS.aberto;
+                const StIcon = st.icon;
+                const initials = t.name ? t.name[0].toUpperCase() : '?';
+                return (
+                  <tr key={t.id} className="group hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors">
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center text-white text-xs font-semibold flex-shrink-0">{initials}</div>
+                        <div>
+                          <p className="text-sm font-medium text-slate-900 dark:text-white">{t.name || 'Sem nome'}</p>
+                          {t.department_name && <p className="text-xs text-slate-400">{t.department_name}</p>}
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 hidden sm:table-cell">
+                      <span className="text-sm font-mono text-slate-500">{fmtPhone(t.phone_number)}</span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-semibold ${st.color}`}>
+                        <StIcon className="w-3 h-3" />{st.label}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 hidden md:table-cell">
+                      <div className="flex items-center gap-1 text-sm text-slate-500">
+                        <MessageCircle className="w-3.5 h-3.5" />{t.message_count || 0}
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 hidden lg:table-cell">
+                      <div className="flex items-center gap-1 text-sm text-slate-500">
+                        <Clock className="w-3.5 h-3.5" />{duration(t.ticket_opened_at, t.ticket_closed_at)}
+                      </div>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button onClick={() => setSelected(t)} className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-500/10 rounded-lg transition-all" title="Detalhes"><Eye className="w-3.5 h-3.5" /></button>
+                        {onOpenChat && <button onClick={() => onOpenChat(t.phone_number)} className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-500/10 rounded-lg transition-all" title="Abrir chat"><ArrowRight className="w-3.5 h-3.5" /></button>}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* Modal detalhes */}
+      </div> {/* fim max-w-5xl */}
+      {selected && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setSelected(null)}>
+          <div className="bg-white dark:bg-slate-900 rounded-xl shadow-2xl w-full max-w-md border border-slate-200 dark:border-slate-700" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center gap-3 p-5 border-b border-slate-100 dark:border-slate-700">
+              <div className="w-10 h-10 bg-blue-500 rounded-full flex items-center justify-center text-white font-semibold">{selected.name ? selected.name[0].toUpperCase() : '?'}</div>
+              <div className="flex-1 min-w-0">
+                <p className="font-semibold text-slate-900 dark:text-white">{selected.name || 'Sem nome'}</p>
+                <p className="text-sm text-slate-500 flex items-center gap-1"><Phone className="w-3 h-3" />{fmtPhone(selected.phone_number)}</p>
+              </div>
+              {(() => { const st = STATUS[selected.ticket_status]; const I = st.icon; return <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold ${st.color}`}><I className="w-3 h-3" />{st.label}</span>; })()}
+            </div>
+            <div className="p-5 space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="bg-slate-50 dark:bg-slate-800 rounded-lg p-3 text-center">
+                  <p className="text-xs text-slate-500 mb-1">Mensagens</p>
+                  <p className="text-2xl font-bold text-slate-900 dark:text-white">{selected.message_count || 0}</p>
                 </div>
-                {getStatusBadge(selectedTicket.ticket_status)}
+                <div className="bg-slate-50 dark:bg-slate-800 rounded-lg p-3 text-center">
+                  <p className="text-xs text-slate-500 mb-1">Duração</p>
+                  <p className="text-2xl font-bold text-slate-900 dark:text-white">{duration(selected.ticket_opened_at, selected.ticket_closed_at)}</p>
+                </div>
+              </div>
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between"><span className="text-slate-500">Aberto em</span><span className="text-slate-900 dark:text-white font-medium">{fmtDate(selected.ticket_opened_at)}</span></div>
+                {selected.ticket_closed_at && <div className="flex justify-between"><span className="text-slate-500">Finalizado em</span><span className="text-slate-900 dark:text-white font-medium">{fmtDate(selected.ticket_closed_at)}</span></div>}
+                {selected.department_name && <div className="flex justify-between"><span className="text-slate-500">Departamento</span><span className="text-slate-900 dark:text-white font-medium">{selected.department_name}</span></div>}
+                {selected.closed_by_name && <div className="flex justify-between"><span className="text-slate-500">Atendido por</span><span className="text-slate-900 dark:text-white font-medium">{selected.closed_by_name}</span></div>}
               </div>
             </div>
-
-            <div className="p-6 space-y-6">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="bg-blue-50 rounded-xl p-4">
-                  <div className="flex items-center gap-2 text-blue-600 mb-2">
-                    <MessageCircle className="w-5 h-5" />
-                    <span className="font-semibold">Total de Mensagens</span>
-                  </div>
-                  <p className="text-3xl font-bold text-blue-700">{selectedTicket.message_count || 0}</p>
-                </div>
-
-                <div className="bg-green-50 rounded-xl p-4">
-                  <div className="flex items-center gap-2 text-green-600 mb-2">
-                    <Clock className="w-5 h-5" />
-                    <span className="font-semibold">Duração Total</span>
-                  </div>
-                  <p className="text-3xl font-bold text-green-700">
-                    {calculateDuration(selectedTicket.ticket_opened_at, selectedTicket.ticket_closed_at)}
-                  </p>
-                </div>
-              </div>
-
-              <div className="space-y-4">
-                <div className="bg-slate-50 rounded-xl p-4">
-                  <div className="flex items-center gap-2 text-slate-700 mb-2">
-                    <Calendar className="w-5 h-5" />
-                    <span className="font-semibold">Informações do Chamado</span>
-                  </div>
-                  <div className="space-y-2 text-sm">
-                    <div className="flex justify-between">
-                      <span className="text-slate-600">Aberto em:</span>
-                      <span className="font-medium text-slate-900">{formatDate(selectedTicket.ticket_opened_at)}</span>
-                    </div>
-                    {selectedTicket.ticket_closed_at && (
-                      <div className="flex justify-between">
-                        <span className="text-slate-600">Finalizado em:</span>
-                        <span className="font-medium text-slate-900">{formatDate(selectedTicket.ticket_closed_at)}</span>
-                      </div>
-                    )}
-                    {selectedTicket.department_name && (
-                      <div className="flex justify-between">
-                        <span className="text-slate-600">Departamento:</span>
-                        <span className="font-medium text-slate-900">{selectedTicket.department_name}</span>
-                      </div>
-                    )}
-                    {selectedTicket.closed_by_name && (
-                      <div className="flex justify-between">
-                        <span className="text-slate-600">Atendido por:</span>
-                        <span className="font-medium text-slate-900">{selectedTicket.closed_by_name}</span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex gap-3">
-                {onOpenChat && (
-                  <button
-                    onClick={() => {
-                      handleOpenChat(selectedTicket.phone_number);
-                      setShowDetailsModal(false);
-                    }}
-                    className="flex-1 px-6 py-3 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-xl font-medium hover:from-blue-600 hover:to-blue-700 transition-all flex items-center justify-center gap-2 shadow-lg"
-                  >
-                    <MessageCircle className="w-5 h-5" />
-                    Abrir Chat
-                    <ArrowRight className="w-5 h-5" />
-                  </button>
-                )}
-                {selectedTicket.ticket_status === 'finalizado' ? (
-                  <button
-                    onClick={() => {
-                      handleReopenTicket(selectedTicket.id);
-                      setShowDetailsModal(false);
-                    }}
-                    className="flex-1 px-6 py-3 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-xl font-medium hover:from-green-600 hover:to-green-700 transition-all flex items-center justify-center gap-2 shadow-lg"
-                  >
-                    <FolderOpen className="w-5 h-5" />
-                    Reabrir Chamado
-                  </button>
-                ) : (
-                  <button
-                    onClick={() => {
-                      handleFinishTicket(selectedTicket.id);
-                      setShowDetailsModal(false);
-                    }}
-                    className="flex-1 px-6 py-3 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-xl font-medium hover:from-green-600 hover:to-green-700 transition-all flex items-center justify-center gap-2 shadow-lg"
-                  >
-                    <CheckCircle2 className="w-5 h-5" />
-                    Finalizar Chamado
-                  </button>
-                )}
-              </div>
-
-              <button
-                onClick={() => setShowDetailsModal(false)}
-                className="w-full px-6 py-3 bg-slate-100 text-slate-700 rounded-xl font-medium hover:bg-slate-200 transition-colors"
-              >
-                Fechar
-              </button>
+            <div className="flex gap-2 p-5 pt-0">
+              {onOpenChat && <button onClick={() => { onOpenChat(selected.phone_number); setSelected(null); }} className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors"><MessageCircle className="w-4 h-4" /> Abrir chat</button>}
+              {selected.ticket_status === 'finalizado'
+                ? <button onClick={() => reopen(selected.id)} className="flex-1 flex items-center justify-center gap-2 py-2.5 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 text-sm font-medium rounded-lg transition-colors"><FolderOpen className="w-4 h-4" /> Reabrir</button>
+                : <button onClick={() => finish(selected.id)} className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium rounded-lg transition-colors"><CheckCircle2 className="w-4 h-4" /> Finalizar</button>
+              }
             </div>
           </div>
         </div>
       )}
 
-      {showToast && <Toast message={toastMessage} onClose={() => setShowToast(false)} />}
+      {toast && <Toast message={toast} onClose={() => setToast('')} />}
     </div>
   );
 }

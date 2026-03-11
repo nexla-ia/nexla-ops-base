@@ -5,258 +5,123 @@ import { useAuth } from '../contexts/AuthContext';
 import Modal from './Modal';
 
 interface Department {
-  id: string;
-  company_id: string;
-  name: string;
-  description: string | null;
-  created_at: string;
-  updated_at: string;
+  id: string; company_id: string; name: string; description: string; created_at: string;
 }
 
-const EMPTY_FORM = {
-  name: '',
-  description: '',
-};
+function getInitials(name: string) {
+  return name.split(' ').filter(Boolean).map(w => w[0]).join('').toUpperCase().slice(0, 2) || '?';
+}
+
+const COLORS = ['#2563eb','#7c3aed','#059669','#d97706','#dc2626','#0891b2'];
+function pickColor(id: string) {
+  let h = 0; for (const c of id) h = (h * 31 + c.charCodeAt(0)) & 0xffff;
+  return COLORS[Math.abs(h) % COLORS.length];
+}
 
 export default function DepartmentsManagement() {
   const { company } = useAuth();
-
   const [departments, setDepartments] = useState<Department[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-
-  const [deleteModal, setDeleteModal] = useState<{
-    isOpen: boolean;
-    department: Department | null;
-  }>({
-    isOpen: false,
-    department: null,
-  });
-
+  const [deleteModal, setDeleteModal] = useState<{ isOpen: boolean; dept: Department | null }>({ isOpen: false, dept: null });
   const [deleting, setDeleting] = useState(false);
-  const [formData, setFormData] = useState({ ...EMPTY_FORM });
+  const [formData, setFormData] = useState({ name: '', description: '' });
 
-  useEffect(() => {
-    fetchDepartments();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [company?.id]);
+  useEffect(() => { fetchData(); }, [company]);
 
-  const fetchDepartments = async () => {
+  const fetchData = async () => {
     if (!company?.id) return;
-
     setLoading(true);
     try {
-      const { data, error } = await supabase
-        .from('departments')
-        .select('*')
-        .eq('company_id', company.id)
-        .order('created_at', { ascending: false });
-
+      const { data, error } = await supabase.from('departments').select('*').eq('company_id', company.id).order('created_at', { ascending: false });
       if (error) throw error;
       setDepartments(data || []);
-    } catch (err) {
-      console.error('Erro ao carregar departamentos:', err);
-    } finally {
-      setLoading(false);
-    }
+    } catch (e) { console.error(e); } finally { setLoading(false); }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!company?.id) return;
-
-    if (!formData.name.trim()) {
-      alert('Preencha o nome do departamento.');
-      return;
-    }
-
+    e.preventDefault(); if (!company?.id) return;
     setSaving(true);
     try {
       if (editingId) {
-        const { error } = await supabase
-          .from('departments')
-          .update({
-            name: formData.name.trim(),
-            description: formData.description.trim() || null,
-            updated_at: new Date().toISOString(),
-          })
-          .eq('id', editingId);
-
+        const { error } = await supabase.from('departments').update({ name: formData.name, description: formData.description, updated_at: new Date().toISOString() }).eq('id', editingId);
         if (error) throw error;
       } else {
-        const { error } = await supabase.from('departments').insert([
-          {
-            company_id: company.id,
-            name: formData.name.trim(),
-            description: formData.description.trim() || null,
-          },
-        ]);
-
+        const { error } = await supabase.from('departments').insert([{ company_id: company.id, name: formData.name, description: formData.description }]);
         if (error) throw error;
       }
-
-      setFormData({ ...EMPTY_FORM });
-      setShowForm(false);
-      setEditingId(null);
-      fetchDepartments();
-    } catch (err: any) {
-      console.error('Erro ao salvar departamento:', err);
-      alert(err?.message || 'Erro ao salvar departamento.');
-    } finally {
-      setSaving(false);
-    }
+      setFormData({ name: '', description: '' }); setShowForm(false); setEditingId(null); fetchData();
+    } catch (e) { console.error(e); alert('Erro ao salvar'); } finally { setSaving(false); }
   };
 
-  const handleEdit = (department: Department) => {
-    setFormData({
-      name: department.name || '',
-      description: department.description || '',
-    });
-    setEditingId(department.id);
-    setShowForm(true);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
-
-  const handleCancel = () => {
-    setFormData({ ...EMPTY_FORM });
-    setEditingId(null);
-    setShowForm(false);
-  };
-
-  const handleDelete = (department: Department) => {
-    setDeleteModal({
-      isOpen: true,
-      department,
-    });
-  };
-
+  const handleEdit = (d: Department) => { setFormData({ name: d.name, description: d.description }); setEditingId(d.id); setShowForm(true); };
+  const handleCancel = () => { setFormData({ name: '', description: '' }); setShowForm(false); setEditingId(null); };
   const confirmDelete = async () => {
-    if (!deleteModal.department) return;
-
+    if (!deleteModal.dept) return;
     setDeleting(true);
     try {
-      const { error } = await supabase
-        .from('departments')
-        .delete()
-        .eq('id', deleteModal.department.id);
-
+      const { error } = await supabase.from('departments').delete().eq('id', deleteModal.dept.id);
       if (error) throw error;
-
-      setDeleteModal({
-        isOpen: false,
-        department: null,
-      });
-
-      fetchDepartments();
-    } catch (err: any) {
-      console.error('Erro ao excluir departamento:', err);
-      alert(err?.message || 'Erro ao excluir departamento.');
-    } finally {
-      setDeleting(false);
-    }
+      setDeleteModal({ isOpen: false, dept: null }); fetchData();
+    } catch (e) { console.error(e); alert('Erro ao excluir'); } finally { setDeleting(false); }
   };
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <Loader2 className="w-8 h-8 text-blue-500 animate-spin" />
-      </div>
-    );
-  }
+  if (loading) return (
+    <div className="flex items-center justify-center h-64">
+      <Loader2 className="w-6 h-6 animate-spin text-slate-400" />
+    </div>
+  );
 
   return (
-    <div className="p-6 animate-in fade-in duration-300">
-      <div className="flex items-center justify-between mb-6">
+    <div className="p-6">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-8">
         <div>
-          <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
-            Departamentos
-          </h2>
-          <p className="text-sm text-gray-500 dark:text-slate-300 mt-1">
-            Gerencie os departamentos da empresa
-          </p>
+          <h2 className="text-xl font-semibold text-slate-900 dark:text-white">Departamentos</h2>
+          <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">{departments.length} departamento{departments.length !== 1 ? 's' : ''}</p>
         </div>
-
         {!showForm && (
-          <button
-            onClick={() => setShowForm(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-gradient-to-br from-blue-500 to-blue-600 text-white rounded-xl hover:scale-105 transition-all shadow-md"
-          >
-            <Plus className="w-5 h-5" />
-            Novo Departamento
+          <button onClick={() => setShowForm(true)}
+            className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors">
+            <Plus className="w-4 h-4" /> Novo Departamento
           </button>
         )}
       </div>
 
+      {/* Formulário */}
       {showForm && (
-        <div className="bg-white/70 dark:bg-slate-900 backdrop-blur-xl border border-gray-200/50 dark:border-slate-600 rounded-2xl p-6 mb-6 shadow-md">
-          <div className="flex items-center justify-between mb-5">
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
-              {editingId ? 'Editar Departamento' : 'Novo Departamento'}
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-5 mb-6">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-sm font-semibold text-slate-900 dark:text-white">
+              {editingId ? 'Editar departamento' : 'Novo departamento'}
             </h3>
-
-            <button
-              onClick={handleCancel}
-              className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-800 rounded-lg transition-all"
-            >
-              <X className="w-5 h-5" />
+            <button onClick={handleCancel} className="p-1 text-slate-400 hover:text-slate-600 rounded transition-colors">
+              <X className="w-4 h-4" />
             </button>
           </div>
-
-          <form onSubmit={handleSubmit} className="space-y-5">
+          <form onSubmit={handleSubmit} className="space-y-3">
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-slate-200 mb-2">
-                Nome do Departamento *
-              </label>
-              <input
-                type="text"
-                required
-                value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                placeholder="Ex: Recepção, Financeiro, Suporte"
-                className="w-full px-4 py-2.5 bg-white dark:bg-slate-800 dark:text-white border border-gray-200 dark:border-slate-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-400 transition-all"
-              />
+              <label className="block text-xs font-medium text-slate-600 dark:text-slate-300 mb-1.5">Nome *</label>
+              <input required value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })}
+                placeholder="Ex: Comercial, Suporte, Financeiro"
+                className="w-full px-3 py-2 text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-600 text-slate-900 dark:text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all" />
             </div>
-
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-slate-200 mb-2">
-                Descrição
-              </label>
-              <textarea
-                rows={4}
-                value={formData.description}
-                onChange={(e) =>
-                  setFormData({ ...formData, description: e.target.value })
-                }
-                placeholder="Descreva a função deste departamento..."
-                className="w-full px-4 py-2.5 bg-white dark:bg-slate-800 dark:text-white border border-gray-200 dark:border-slate-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-400 transition-all resize-none"
-              />
+              <label className="block text-xs font-medium text-slate-600 dark:text-slate-300 mb-1.5">Descrição</label>
+              <textarea value={formData.description} onChange={e => setFormData({ ...formData, description: e.target.value })}
+                placeholder="Responsabilidades deste departamento" rows={2}
+                className="w-full px-3 py-2 text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-600 text-slate-900 dark:text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all resize-none" />
             </div>
-
-            <div className="flex gap-3 pt-2">
-              <button
-                type="submit"
-                disabled={saving}
-                className="flex-1 px-4 py-2.5 bg-gradient-to-br from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white rounded-xl transition-all disabled:opacity-50 shadow-md font-medium"
-              >
-                {saving ? (
-                  <span className="flex items-center justify-center gap-2">
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    Salvando...
-                  </span>
-                ) : editingId ? (
-                  'Atualizar Departamento'
-                ) : (
-                  'Criar Departamento'
-                )}
+            <div className="flex gap-2 pt-1">
+              <button type="submit" disabled={saving}
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm font-medium rounded-lg transition-colors flex items-center gap-2">
+                {saving && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                {saving ? 'Salvando...' : editingId ? 'Salvar' : 'Criar'}
               </button>
-
-              <button
-                type="button"
-                onClick={handleCancel}
-                className="px-4 py-2.5 bg-gray-100 dark:bg-slate-700 dark:text-white text-gray-700 rounded-xl hover:bg-gray-200 dark:hover:bg-slate-600 transition-all font-medium"
-              >
+              <button type="button" onClick={handleCancel}
+                className="px-4 py-2 text-sm font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors">
                 Cancelar
               </button>
             </div>
@@ -264,76 +129,77 @@ export default function DepartmentsManagement() {
         </div>
       )}
 
-      {departments.length === 0 ? (
-        <div className="bg-white/70 dark:bg-slate-900 backdrop-blur-xl border border-gray-200/50 dark:border-slate-600 rounded-2xl p-12 text-center shadow-md">
-          <div className="w-20 h-20 bg-gradient-to-br from-blue-100 to-blue-200 dark:from-blue-900/40 dark:to-blue-800/40 rounded-2xl flex items-center justify-center mx-auto mb-4">
-            <Building2 className="w-10 h-10 text-blue-500" />
+      {/* Vazio */}
+      {departments.length === 0 && (
+        <div className="flex flex-col items-center justify-center py-16 text-center">
+          <div className="w-12 h-12 bg-slate-100 dark:bg-slate-800 rounded-xl flex items-center justify-center mb-4">
+            <Building2 className="w-6 h-6 text-slate-400" />
           </div>
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
-            Nenhum departamento cadastrado
-          </h3>
-          <p className="text-sm text-gray-500 dark:text-slate-300">
-            Crie o primeiro departamento da sua empresa
-          </p>
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {departments.map((department) => (
-            <div
-              key={department.id}
-              className="bg-white/70 dark:bg-slate-900 backdrop-blur-xl border border-gray-200/50 dark:border-slate-600 rounded-2xl p-6 shadow-md hover:shadow-lg transition-all group hover:-translate-y-1"
-            >
-              <div className="flex justify-between items-start mb-4">
-                <div className="w-14 h-14 bg-gradient-to-br from-blue-400 to-blue-600 rounded-xl flex items-center justify-center shadow-md">
-                  <Building2 className="w-7 h-7 text-white" />
-                </div>
-
-                <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <button
-                    onClick={() => handleEdit(department)}
-                    className="p-2 text-gray-400 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-500/20 rounded-lg transition-all"
-                    title="Editar"
-                  >
-                    <Edit2 className="w-4 h-4" />
-                  </button>
-
-                  <button
-                    onClick={() => handleDelete(department)}
-                    className="p-2 text-gray-400 dark:text-slate-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/20 rounded-lg transition-all"
-                    title="Excluir"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </div>
-              </div>
-
-              <h3 className="font-bold text-gray-900 dark:text-white text-lg truncate">
-                {department.name}
-              </h3>
-
-              <p className="text-sm text-gray-600 dark:text-slate-300 mt-3 line-clamp-3 min-h-[60px]">
-                {department.description || 'Sem descrição cadastrada.'}
-              </p>
-
-              <p className="text-xs text-gray-400 dark:text-slate-500 mt-4">
-                Criado em {new Date(department.created_at).toLocaleDateString('pt-BR')}
-              </p>
-            </div>
-          ))}
+          <p className="text-sm font-medium text-slate-600 dark:text-slate-300">Nenhum departamento</p>
+          <p className="text-xs text-slate-400 mt-1">Crie o primeiro para começar</p>
         </div>
       )}
 
-      <Modal
-        isOpen={deleteModal.isOpen}
-        onClose={() => setDeleteModal({ isOpen: false, department: null })}
-        onConfirm={confirmDelete}
-        title="Excluir Departamento"
-        message={`Tem certeza que deseja excluir o departamento "${deleteModal.department?.name}"?\n\nEsta ação não pode ser desfeita.`}
-        confirmText="Excluir"
-        cancelText="Cancelar"
-        confirmColor="red"
-        loading={deleting}
-      />
+      {/* Tabela */}
+      {departments.length > 0 && (
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden">
+          <table className="w-full">
+            <thead>
+              <tr className="border-b border-slate-200 dark:border-slate-700">
+                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">Departamento</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide hidden md:table-cell">Descrição</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide hidden sm:table-cell">Criado em</th>
+                <th className="px-4 py-3 w-20" />
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 dark:divide-slate-700/50">
+              {departments.map(dept => {
+                const color = pickColor(dept.id);
+                return (
+                  <tr key={dept.id} className="group hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-lg flex items-center justify-center text-white text-xs font-bold flex-shrink-0"
+                          style={{ backgroundColor: color }}>
+                          {getInitials(dept.name)}
+                        </div>
+                        <span className="text-sm font-medium text-slate-900 dark:text-white">{dept.name}</span>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 hidden md:table-cell">
+                      <span className="text-sm text-slate-500 dark:text-slate-400 line-clamp-1">
+                        {dept.description || <span className="italic text-slate-300 dark:text-slate-600">—</span>}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 hidden sm:table-cell">
+                      <span className="text-sm text-slate-500 dark:text-slate-400">
+                        {new Date(dept.created_at).toLocaleDateString('pt-BR')}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button onClick={() => handleEdit(dept)}
+                          className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-500/10 rounded-lg transition-all">
+                          <Edit2 className="w-3.5 h-3.5" />
+                        </button>
+                        <button onClick={() => setDeleteModal({ isOpen: true, dept })}
+                          className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-lg transition-all">
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      <Modal isOpen={deleteModal.isOpen} onClose={() => setDeleteModal({ isOpen: false, dept: null })}
+        onConfirm={confirmDelete} title="Excluir Departamento"
+        message={`Excluir "${deleteModal.dept?.name}"? Esta ação não pode ser desfeita.`}
+        confirmText="Excluir" cancelText="Cancelar" confirmColor="red" loading={deleting} />
     </div>
   );
 }
