@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from "react";
 import { supabase } from "../lib/supabase";
 import { useAuth } from "../contexts/AuthContext";
-import { Menu, X, Building2, MessageSquare, Plus, LogOut, Search, User, Send, Paperclip, Image as ImageIcon, RefreshCw, Loader2, Edit2, Bell, Package, Settings, Copy, Check, Eye, Users, FolderTree, Tag as TagIcon, Contact, MessageCircle } from "lucide-react";
+import { Menu, X, Building2, MessageSquare, Plus, LogOut, Search, User, Send, Paperclip, Image as ImageIcon, RefreshCw, Loader2, Edit2, Bell, Package, Settings, Copy, Check, Eye, Users, FolderTree, Tag as TagIcon, Contact, MessageCircle, Moon, Sun } from "lucide-react";
 import Modal from "./Modal";
 import Notification from "./Notification";
 import PlansManagement from "./PlansManagement";
