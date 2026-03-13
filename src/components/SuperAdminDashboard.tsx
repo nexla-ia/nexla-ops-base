@@ -67,6 +67,7 @@ export default function SuperAdminDashboard() {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const [showForm, setShowForm] = useState(false);
+  const [companySearch, setCompanySearch] = useState("");
 
   const [selectedChat, setSelectedChat] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
@@ -269,6 +270,7 @@ export default function SuperAdminDashboard() {
     const { data, error } = await supabase
       .from("companies")
       .select("id,api_key,name,phone_number,email,user_id,is_super_admin,created_at,max_attendants,payment_notification_day,plan_id,additional_attendants")
+      .neq("is_super_admin", true)
       .order("created_at", { ascending: false });
 
     if (error) {
@@ -377,139 +379,21 @@ export default function SuperAdminDashboard() {
     setCreating(true);
 
     try {
-      const {
-        data: { session },
-        error: sessErr,
-      } = await supabase.auth.getSession();
-
-      if (sessErr) throw sessErr;
-      if (!session?.access_token) {
-        throw new Error("Sem token. Faça login novamente.");
-      }
-
-      // Verificar se o usuário atual está na tabela super_admins
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        console.log("Current user ID:", user.id);
-        const { data: adminCheck } = await supabase
-          .from("super_admins")
-          .select("user_id")
-          .eq("user_id", user.id)
-          .maybeSingle();
-        console.log("Super admin check:", adminCheck);
-
-        if (!adminCheck) {
-          throw new Error("Você não está cadastrado como super admin. Entre em contato com o administrador do sistema.");
-        }
-      }
-
-      const response = await supabase.functions.invoke("create-company", {
-        body: {
-          email: email.trim().toLowerCase(),
-          password,
-          name: name.trim(),
-          phone_number: phone_number.trim(),
-          api_key: api_key.trim(),
-          plan_id: selectedPlanId || null,
-          additional_attendants: parseInt(additionalAttendants) || 0,
-          payment_notification_day: parseInt(paymentNotificationDay) || 5,
-          payment_day: 10,
-        },
-        headers: {
-          Authorization: `Bearer ${session.access_token}`,
-        },
+      const { data, error } = await supabase.rpc("rpc_create_company", {
+        p_email:                    email.trim().toLowerCase(),
+        p_password:                 password,
+        p_name:                     name.trim(),
+        p_phone_number:             phone_number.trim(),
+        p_api_key:                  api_key.trim(),
+        p_plan_id:                  selectedPlanId && selectedPlanId !== "" ? selectedPlanId : null,
+        p_additional_attendants:    parseInt(additionalAttendants) || 0,
+        p_payment_notification_day: parseInt(paymentNotificationDay) || 5,
+        p_payment_day:              10,
       });
 
-      console.log("Response completo:", response);
-      console.log("Response.data:", response.data);
-      console.log("Response.error:", response.error);
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
 
-      // Verificar se houve erro na chamada
-      if (response.error) {
-        console.error("Erro create-company:", response.error);
-        console.error("Error details from data:", response.data);
-
-        // Tentar fazer uma chamada direta para capturar a resposta real
-        try {
-          const directResponse = await fetch(
-            `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/create-company`,
-            {
-              method: 'POST',
-              headers: {
-                'Authorization': `Bearer ${session.access_token}`,
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify({
-                email: email.trim().toLowerCase(),
-                password,
-                name: name.trim(),
-                phone_number: phone_number.trim(),
-                api_key: api_key.trim(),
-                plan_id: selectedPlanId || null,
-                additional_attendants: parseInt(additionalAttendants) || 0,
-                payment_notification_day: parseInt(paymentNotificationDay) || 5,
-                payment_day: 10,
-              }),
-            }
-          );
-
-          console.log("Direct response status:", directResponse.status);
-          const responseText = await directResponse.text();
-          console.log("Direct response body:", responseText);
-
-          if (!directResponse.ok) {
-            try {
-              const errorData = JSON.parse(responseText);
-              let errorMessage = errorData.error || errorData.details || "Erro ao criar empresa";
-
-              // Melhorar mensagem de erro de email duplicado
-              if (errorMessage.includes("Email já está em uso")) {
-                errorMessage = `O email "${email.trim().toLowerCase()}" já está cadastrado no sistema. Use um email diferente que nunca foi utilizado antes.`;
-              } else if (errorMessage.includes("API Key já está em uso") || errorMessage.includes("api_key")) {
-                errorMessage = `A API Key "${api_key.trim()}" já está em uso. Gere uma nova API Key única.`;
-              }
-
-              throw new Error(errorMessage);
-            } catch (parseError: any) {
-              if (parseError.message && !parseError.message.includes("Unexpected token")) {
-                throw parseError;
-              }
-              throw new Error(`Erro HTTP ${directResponse.status}: ${responseText}`);
-            }
-          }
-
-          const successData = JSON.parse(responseText);
-          console.log("Empresa criada com sucesso:", successData);
-
-          // limpa e fecha
-          setShowForm(false);
-          setName("");
-          setPhoneNumber("");
-          setApiKey("");
-          setEmail("");
-          setPassword("");
-          setSelectedPlanId("");
-          setAdditionalAttendants("0");
-          setPaymentNotificationDay("5");
-
-          // recarrega lista
-          await loadCompanies();
-          return;
-
-        } catch (directError: any) {
-          console.error("Erro na chamada direta:", directError);
-          throw directError;
-        }
-      }
-
-      if (response.data?.error) {
-        console.error("Error in response data:", response.data);
-        throw new Error(response.data.error);
-      }
-
-      console.log("Empresa criada:", response.data);
-
-      // limpa e fecha
       setShowForm(false);
       setName("");
       setPhoneNumber("");
@@ -520,7 +404,6 @@ export default function SuperAdminDashboard() {
       setAdditionalAttendants("0");
       setPaymentNotificationDay("5");
 
-      // recarrega lista
       await loadCompanies();
     } catch (err: any) {
       console.error("handleCreateCompany:", err);
@@ -552,28 +435,20 @@ export default function SuperAdminDashboard() {
     setDeleting(true);
 
     try {
-      const { data, error } = await supabase.rpc('delete_company_cascade', {
-        company_uuid: companyId
+      const { data, error } = await supabase.rpc('rpc_delete_company', {
+        p_company_id: companyId,
       });
 
-      if (error) {
-        console.error('Erro ao deletar empresa:', error);
-        setNotification({
-          type: 'error',
-          message: `Erro ao deletar empresa: ${error.message}`
-        });
-        return;
-      }
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
 
-      if (data?.success) {
-        closeDeleteModal();
-        setNotification({
-          type: 'success',
-          message: `Empresa "${companyName}" deletada com sucesso!`
-        });
-        await loadCompanies();
-        await loadMessages();
-      }
+      closeDeleteModal();
+      setNotification({
+        type: 'success',
+        message: `Empresa "${companyName}" deletada com sucesso!`
+      });
+      await loadCompanies();
+      await loadMessages();
     } catch (err: any) {
       console.error('Erro ao deletar empresa:', err);
       setNotification({
@@ -1139,10 +1014,10 @@ export default function SuperAdminDashboard() {
 
           {activeTab === "empresas" && (
             <>
-              <div className="flex items-center justify-between mb-8">
+              <div className="flex items-center justify-between mb-6">
                 <div>
-                  <h2 className="text-3xl font-bold text-gray-900 mb-2">Empresas Cadastradas</h2>
-                  <p className="text-gray-600">Gerencie todas as empresas do sistema</p>
+                  <h2 className="text-3xl font-bold text-gray-900 mb-1">Empresas Cadastradas</h2>
+                  <p className="text-gray-500 text-sm">{companies.length} empresa{companies.length !== 1 ? "s" : ""} no sistema</p>
                 </div>
 
                 <button
@@ -1152,6 +1027,16 @@ export default function SuperAdminDashboard() {
                   <Plus size={20} />
                   Nova Empresa
                 </button>
+              </div>
+
+              <div className="mb-6">
+                <input
+                  type="text"
+                  value={companySearch}
+                  onChange={(e) => setCompanySearch(e.target.value)}
+                  placeholder="Buscar por nome, email ou telefone..."
+                  className="w-full max-w-md rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-gray-900 placeholder-gray-400 focus:border-teal-500 focus:outline-none focus:ring-2 focus:ring-teal-500/20 shadow-sm"
+                />
               </div>
 
               {showForm && (
@@ -1340,14 +1225,23 @@ export default function SuperAdminDashboard() {
                 </div>
               )}
 
+              {(() => {
+                const q = companySearch.toLowerCase();
+                const filtered = companies.filter(c =>
+                  !q ||
+                  c.name.toLowerCase().includes(q) ||
+                  c.email.toLowerCase().includes(q) ||
+                  c.phone_number.includes(q)
+                );
+                return (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {companies.length === 0 && (
+                {filtered.length === 0 && (
                   <div className="col-span-full text-center py-16 text-gray-500">
-                    Nenhuma empresa cadastrada.
+                    {companySearch ? "Nenhuma empresa encontrada para esta busca." : "Nenhuma empresa cadastrada."}
                   </div>
                 )}
 
-                {companies.map((c, index) => (
+                {filtered.map((c, index) => (
                   <div
                     key={c.id}
                     className="group rounded-xl bg-white/80 border border-teal-200/50 p-6 hover:border-teal-300 hover:shadow-lg transition-all backdrop-blur-sm hover:scale-105 animate-fadeIn"
@@ -1462,6 +1356,8 @@ export default function SuperAdminDashboard() {
                   </div>
                 ))}
               </div>
+                );
+              })()}
             </>
           )}
 

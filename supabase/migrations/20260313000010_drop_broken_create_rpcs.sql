@@ -1,0 +1,2 @@
+-- rpc_create_company e rpc_create_attendant são usadas pelo frontend via supabase.rpc()
+-- Mantidas no banco — não remover

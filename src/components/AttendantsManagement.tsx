@@ -71,9 +71,9 @@ export default function AttendantsManagement() {
         const { error } = await supabase.from('attendants').update({ name: formData.name, email: formData.email, phone: formData.phone, function: formData.function, department_id: formData.department_id || null, sector_id: formData.sector_id || null, is_active: formData.is_active, updated_at: new Date().toISOString() }).eq('id', editingId);
         if (error) throw error;
       } else {
-        const { data: { session }, error: se } = await supabase.auth.getSession();
-        if (se) throw se; if (!session?.access_token) throw new Error('Sem sessão');
-        const { data, error } = await supabase.functions.invoke('create-attendant', { body: { name: formData.name, email: formData.email, password: formData.password, phone: formData.phone, function: formData.function, api_key: company.api_key, department_id: formData.department_id || null, sector_id: formData.sector_id || null, is_active: formData.is_active }, headers: { Authorization: `Bearer ${session.access_token}` } });
+        const { data, error } = await supabase.functions.invoke('create-attendant', {
+          body: { api_key: company.api_key, name: formData.name, email: formData.email, password: formData.password, phone: formData.phone, function: formData.function, department_id: formData.department_id || null, sector_id: formData.sector_id || null, is_active: formData.is_active },
+        });
         if (error) throw error; if (data?.error) throw new Error(data.error);
       }
       setFormData({ name: '', email: '', phone: '', function: '', password: '', department_id: '', sector_id: '', is_active: true });
@@ -87,11 +87,9 @@ export default function AttendantsManagement() {
     if (!deleteModal.attendant) return;
     setDeleting(true);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) throw new Error('Não autenticado');
-      const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/delete-attendant`, { method: 'POST', headers: { Authorization: `Bearer ${session.access_token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ attendant_id: deleteModal.attendant.id }) });
-      const result = await res.json();
-      if (!res.ok) throw new Error(result.error || 'Erro ao excluir');
+      const { data: result, error } = await supabase.rpc('rpc_delete_attendant', { p_attendant_id: deleteModal.attendant.id });
+      if (error) throw error;
+      if (result?.error) throw new Error(result.error);
       setDeleteModal({ isOpen: false, attendant: null }); fetchData();
     } catch (err) { alert(err instanceof Error ? err.message : 'Erro'); } finally { setDeleting(false); }
   };

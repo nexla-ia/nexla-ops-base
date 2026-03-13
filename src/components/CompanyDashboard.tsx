@@ -893,20 +893,7 @@ export default function CompanyDashboard() {
 
   const checkPaymentNotifications = async () => {
     try {
-      const {
-        data: { session },
-        error: sessErr,
-      } = await supabase.auth.getSession();
-
-      if (sessErr || !session?.access_token) {
-        return;
-      }
-
-      const { data, error } = await supabase.functions.invoke("check-payment-notifications", {
-        headers: {
-          Authorization: `Bearer ${session.access_token}`,
-        },
-      });
+      const { data, error } = await supabase.rpc("rpc_check_payment_notifications");
 
       if (error) {
         return;

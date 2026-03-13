@@ -1,4 +1,3 @@
-import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
 
 const corsHeaders = {
@@ -273,7 +272,6 @@ Deno.serve(async (req: Request) => {
           company_id: insertedCompany.id,
           name: "Recepção",
           is_default: true,
-          is_reception: true,
         });
       console.log("Reception department created manually.");
     }
