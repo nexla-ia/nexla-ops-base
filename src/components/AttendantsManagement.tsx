@@ -71,8 +71,8 @@ export default function AttendantsManagement() {
         const { error } = await supabase.from('attendants').update({ name: formData.name, email: formData.email, phone: formData.phone, function: formData.function, department_id: formData.department_id || null, sector_id: formData.sector_id || null, is_active: formData.is_active, updated_at: new Date().toISOString() }).eq('id', editingId);
         if (error) throw error;
       } else {
-        const { data, error } = await supabase.functions.invoke('create-attendant', {
-          body: { api_key: company.api_key, name: formData.name, email: formData.email, password: formData.password, phone: formData.phone, function: formData.function, department_id: formData.department_id || null, sector_id: formData.sector_id || null, is_active: formData.is_active },
+        const { data, error } = await supabase.rpc('rpc_create_attendant', {
+          p_api_key: company.api_key, p_name: formData.name, p_email: formData.email, p_password: formData.password, p_phone: formData.phone, p_function: formData.function, p_department_id: formData.department_id || null, p_sector_id: formData.sector_id || null, p_is_active: formData.is_active,
         });
         if (error) throw error; if (data?.error) throw new Error(data.error);
       }
@@ -168,17 +168,10 @@ export default function AttendantsManagement() {
                   className="w-full px-3 py-2 text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-600 text-slate-900 dark:text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all" />
               </div>
             )}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <div>
-                <label className="block text-xs font-medium text-slate-600 dark:text-slate-300 mb-1.5">Telefone</label>
-                <input value={formData.phone} onChange={e => setFormData({ ...formData, phone: formatPhone(e.target.value) })} placeholder="(00) 00000-0000" maxLength={15}
-                  className="w-full px-3 py-2 text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-600 text-slate-900 dark:text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all" />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-slate-600 dark:text-slate-300 mb-1.5">Função</label>
-                <input value={formData.function} onChange={e => setFormData({ ...formData, function: e.target.value })} placeholder="Ex: Vendedor, Suporte"
-                  className="w-full px-3 py-2 text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-600 text-slate-900 dark:text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all" />
-              </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-600 dark:text-slate-300 mb-1.5">Função</label>
+              <input value={formData.function} onChange={e => setFormData({ ...formData, function: e.target.value })} placeholder="Ex: Vendedor, Suporte"
+                className="w-full px-3 py-2 text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-600 text-slate-900 dark:text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all" />
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <div>
