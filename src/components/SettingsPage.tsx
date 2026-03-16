@@ -95,21 +95,17 @@ function ChatPreview({ bgColor, sentBg, sentText, receivedBg, receivedText }: {
   );
 }
 
-export default function SettingsPage() {
+export default function SettingsPage({ colorMode = 'light', onColorModeChange }: { colorMode?: 'light' | 'dark'; onColorModeChange?: (mode: 'light' | 'dark') => void } = {}) {
   const { settings, updateSettings, resetSettings } = useTheme();
   const [uploadingLogo, setUploadingLogo] = useState(false);
   const [saving, setSaving] = useState(false);
   const [savedMsg, setSavedMsg] = useState('');
   const [hasChanges, setHasChanges] = useState(false);
   const isInit = useRef(false);
-  const [colorMode, setColorMode] = useState<'light' | 'dark'>(
-    () => (localStorage.getItem('colorMode') || 'dark') as 'light' | 'dark'
-  );
 
   const toggleColorMode = (mode: 'light' | 'dark') => {
-    setColorMode(mode);
     localStorage.setItem('colorMode', mode);
-    document.documentElement.classList.toggle('dark', mode === 'dark');
+    onColorModeChange?.(mode);
   };
 
   const [form, setForm] = useState({

@@ -229,6 +229,10 @@ export default function CompanyDashboard() {
   const [showTagModal, setShowTagModal] = useState(false);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; phoneNumber: string } | null>(null);
   const [showRenameModal, setShowRenameModal] = useState(false);
+  const [colorMode, setColorMode] = useState<'light' | 'dark'>(
+    () => (localStorage.getItem('colorMode') || 'light') as 'light' | 'dark'
+  );
+
   const [renamePhone, setRenamePhone] = useState('');
   const [renameValue, setRenameValue] = useState('');
   const [departments, setDepartments] = useState<Department[]>([]);
@@ -2762,7 +2766,7 @@ export default function CompanyDashboard() {
   const messageGroups = groupMessagesByDate(currentMessages);
 
   return (
-    <div className="h-screen flex flex-col bg-gradient-to-br from-slate-50 via-blue-50/30 to-slate-50 dark:from-[#0d1117] dark:via-[#0d1117] dark:to-[#0b0f14] overflow-hidden pt-14">
+    <div className={`h-screen flex flex-col bg-gradient-to-br from-slate-50 via-blue-50/30 to-slate-50 dark:from-[#0d1117] dark:via-[#0d1117] dark:to-[#0b0f14] overflow-hidden pt-14${colorMode === 'dark' ? ' dark' : ''}`}>
       {showToast && (
         <Toast
           message={toastMessage}
@@ -4139,7 +4143,7 @@ export default function CompanyDashboard() {
             </div>
           ) : activeTab === 'configuracoes' ? (
             <div key="configuracoes" className="flex-1 overflow-y-auto animate-in fade-in slide-in-from-bottom-2 duration-200">
-              <SettingsPage />
+              <SettingsPage colorMode={colorMode} onColorModeChange={setColorMode} />
             </div>
           ) : null}
         </div>

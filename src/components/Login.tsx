@@ -34,47 +34,40 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-100 via-slate-50 to-slate-100 p-4 relative overflow-hidden">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-100 via-teal-50 to-yellow-50 p-4 relative overflow-hidden">
       <style>{`
         @keyframes float {
-          0%, 100% {
-            transform: translateY(0px);
-          }
-          50% {
-            transform: translateY(-20px);
-          }
+          0%, 100% { transform: translateY(0px); }
+          50% { transform: translateY(-20px); }
         }
-
-        .float-shape {
-          animation: float 6s ease-in-out infinite;
-        }
+        .float-shape { animation: float 6s ease-in-out infinite; }
       `}</style>
 
       {/* Decorative Background Shapes */}
-      <div className="absolute top-0 left-0 w-96 h-96 bg-teal-300 rounded-full opacity-40 blur-3xl -translate-x-1/2 -translate-y-1/2"></div>
-      <div className="absolute bottom-0 right-0 w-96 h-96 bg-yellow-300 rounded-full opacity-40 blur-3xl translate-x-1/3 translate-y-1/3"></div>
-      <div className="absolute bottom-20 right-20 w-64 h-64 bg-teal-400 rounded-full opacity-30 blur-2xl"></div>
+      <div className="absolute top-0 left-0 w-96 h-96 bg-teal-400 rounded-full opacity-10 blur-3xl -translate-x-1/2 -translate-y-1/2"></div>
+      <div className="absolute bottom-0 right-0 w-96 h-96 bg-yellow-300 rounded-full opacity-15 blur-3xl translate-x-1/3 translate-y-1/3"></div>
+      <div className="absolute bottom-20 right-20 w-64 h-64 bg-teal-300 rounded-full opacity-10 blur-2xl"></div>
 
-      <div className="w-full max-w-5xl bg-white/80 backdrop-blur-sm rounded-3xl shadow-2xl overflow-hidden flex flex-col md:flex-row relative z-10">
+      <div className="w-full max-w-5xl bg-white rounded-3xl shadow-2xl overflow-hidden flex flex-col md:flex-row relative z-10">
         {/* Left Side - Login Form */}
         <div className="w-full md:w-1/2 p-12 md:p-16 flex flex-col justify-center">
           <div>
             <h1 className="text-5xl font-bold text-teal-600 mb-12 tracking-tight">WELCOME</h1>
 
             {errorMsg && (
-              <div className="mb-6 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">
+              <div className="mb-6 rounded-lg bg-red-50 border border-red-300 px-4 py-3 text-sm text-red-600">
                 {errorMsg}
               </div>
             )}
 
             <form onSubmit={handleSubmit} className="space-y-6">
               <div>
-                <label className="block text-xs font-semibold text-gray-600 mb-2 tracking-wide uppercase">
+                <label className="block text-xs font-semibold text-gray-500 mb-2 tracking-wide uppercase">
                   Username
                 </label>
                 <input
                   type="email"
-                  className="w-full border-b-2 border-gray-300 px-0 py-2 text-gray-600 placeholder-gray-400 outline-none focus:border-teal-500 transition-colors bg-transparent"
+                  className="w-full border-b-2 border-gray-300 px-0 py-2 text-gray-800 placeholder-gray-400 outline-none focus:border-teal-500 transition-colors bg-transparent"
                   placeholder="usuario@exemplo.com"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
@@ -83,13 +76,13 @@ export default function Login() {
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-gray-600 mb-2 tracking-wide uppercase">
+                <label className="block text-xs font-semibold text-gray-500 mb-2 tracking-wide uppercase">
                   Password
                 </label>
                 <div className="relative">
                   <input
                     type={showPassword ? "text" : "password"}
-                    className="w-full border-b-2 border-gray-300 px-0 py-2 pr-10 text-gray-600 placeholder-gray-400 outline-none focus:border-teal-500 transition-colors bg-transparent"
+                    className="w-full border-b-2 border-gray-300 px-0 py-2 pr-10 text-gray-800 placeholder-gray-400 outline-none focus:border-teal-500 transition-colors bg-transparent"
                     placeholder="••••••••"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
@@ -106,23 +99,23 @@ export default function Login() {
               </div>
 
               <div className="flex items-center justify-between text-sm pt-2">
-                <label className="flex items-center gap-2 text-gray-600 cursor-pointer">
+                <label className="flex items-center gap-2 text-gray-500 cursor-pointer">
                   <input
                     type="checkbox"
                     checked={rememberMe}
                     onChange={(e) => setRememberMe(e.target.checked)}
-                    className="w-4 h-4 rounded border-gray-300 accent-teal-600"
+                    className="w-4 h-4 rounded border-gray-300 accent-teal-500"
                   />
                   <span>Remember</span>
                 </label>
-                <button type="button" className="text-gray-500 hover:text-gray-700 font-medium">
+                <button type="button" className="text-gray-500 hover:text-gray-700 font-medium transition-colors">
                   Forgot Password?
                 </button>
               </div>
 
               <button
                 type="submit"
-                className="w-full rounded-lg bg-yellow-400 text-gray-800 py-3 px-6 font-bold text-base hover:bg-yellow-500 shadow-md hover:shadow-lg transition-all transform hover:scale-[1.02] mt-8"
+                className="w-full rounded-lg bg-yellow-400 text-gray-900 py-3 px-6 font-bold text-base hover:bg-yellow-500 shadow-md hover:shadow-lg transition-all transform hover:scale-[1.02] mt-8"
               >
                 SUBMIT
               </button>
@@ -135,7 +128,7 @@ export default function Login() {
         </div>
 
         {/* Right Side - Illustration */}
-        <div className="w-full md:w-1/2 p-12 md:p-16 flex items-center justify-center relative">
+        <div className="w-full md:w-1/2 p-12 md:p-16 flex items-center justify-center relative bg-gradient-to-br from-teal-50 to-slate-100">
           <div className="relative">
             {/* Phone/Card Device */}
             <div className="bg-gradient-to-br from-teal-500 to-teal-600 rounded-3xl p-6 shadow-2xl w-72 relative float-shape">
@@ -146,19 +139,18 @@ export default function Login() {
                 <div className="w-2 h-2 bg-white/60 rounded-full"></div>
               </div>
 
-              {/* White card content */}
+              {/* Inner card content */}
               <div className="bg-white rounded-2xl p-8 text-center shadow-lg">
-                {/* Lock icon with background */}
-                <div className="mx-auto w-24 h-24 bg-teal-100 rounded-2xl flex items-center justify-center mb-6">
+                <div className="mx-auto w-24 h-24 bg-teal-50 rounded-2xl flex items-center justify-center mb-6">
                   <svg width="40" height="40" viewBox="0 0 40 40" fill="none">
                     <rect x="10" y="18" width="20" height="16" rx="2" fill="#14B8A6" stroke="#14B8A6" strokeWidth="2"/>
                     <path d="M14 18V12C14 8.68629 16.6863 6 20 6C23.3137 6 26 8.68629 26 12V18" stroke="#14B8A6" strokeWidth="2" strokeLinecap="round"/>
-                    <circle cx="20" cy="26" r="2" fill="white"/>
+                    <circle cx="20" cy="26" r="2" fill="#0f766e"/>
                   </svg>
                 </div>
 
                 <h2 className="text-3xl font-bold text-teal-600 mb-2">WELCOME</h2>
-                <p className="text-gray-500 text-sm">NEXLA Platform</p>
+                <p className="text-gray-400 text-sm">NEXLA Platform</p>
               </div>
             </div>
 
