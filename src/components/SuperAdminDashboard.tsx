@@ -743,7 +743,10 @@ export default function SuperAdminDashboard() {
           apikey_instancia: apiKey,
         };
 
-        await fetch('https://n8n.nexladesenvolvimento.com.br/webhook/EnvioMensagemOPS', {
+        const companyData = companies.find(c => c.id === companyId);
+        const webhookUrl = companyData?.webhook_envio || 'https://n8n.nexladesenvolvimento.com.br/webhook/EnvioMensagemOPS';
+
+        await fetch(webhookUrl, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',

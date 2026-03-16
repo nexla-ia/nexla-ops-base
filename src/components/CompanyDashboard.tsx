@@ -2266,7 +2266,7 @@ export default function CompanyDashboard() {
     const webhookController = new AbortController();
     const webhookTimeout = setTimeout(() => webhookController.abort(), 10000);
 
-    fetch('https://n8n.nexladesenvolvimento.com.br/webhook/EnvioMensagemOPS', {
+    fetch(company.webhook_envio || 'https://n8n.nexladesenvolvimento.com.br/webhook/EnvioMensagemOPS', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(webhookPayload),

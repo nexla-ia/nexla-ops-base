@@ -21,6 +21,8 @@ export interface Company {
   logo_url?: string;
   ia_ativada?: boolean;
   created_at: string;
+  webhook_recebimento?: string | null;
+  webhook_envio?: string | null;
 }
 
 export interface Message {
