@@ -1692,7 +1692,9 @@ export default function CompanyDashboard() {
   const startConversationFromContact = async (wc: { name: string; phone: string }) => {
     if (!company?.id || !wc.phone) return;
     try {
-      const target = encodeURIComponent('https://n8n.nexladesenvolvimento.com.br/webhook/iniciarconversa');
+      const webhookEnvio = company?.webhook_envio;
+      if (!webhookEnvio) { console.warn('⚠️ webhook_envio não cadastrado para esta empresa'); return; }
+      const target = encodeURIComponent(webhookEnvio);
       const proxyUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/webhook-proxy?url=${target}`;
       await fetch(proxyUrl, {
         method: 'POST',
@@ -1832,7 +1834,9 @@ export default function CompanyDashboard() {
     if (webhookContacts.length > 0) return;
     setLoadingWebhookContacts(true);
     try {
-      const target = encodeURIComponent('https://n8n.nexladesenvolvimento.com.br/webhook/buscacontato');
+      const webhookEnvio = company?.webhook_envio;
+      if (!webhookEnvio) { console.warn('⚠️ webhook_envio não cadastrado para esta empresa'); setLoadingWebhookContacts(false); return; }
+      const target = encodeURIComponent(webhookEnvio);
       const proxyUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/webhook-proxy?url=${target}`;
       const response = await fetch(proxyUrl, {
         method: 'POST',

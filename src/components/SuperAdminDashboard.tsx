@@ -744,7 +744,8 @@ export default function SuperAdminDashboard() {
         };
 
         const companyData = companies.find(c => c.id === companyId);
-        const webhookUrl = companyData?.webhook_envio || 'https://n8n.nexladesenvolvimento.com.br/webhook/EnvioMensagemOPS';
+        const webhookUrl = companyData?.webhook_envio;
+        if (!webhookUrl) { console.warn('⚠️ webhook_envio não cadastrado para esta empresa'); return; }
 
         await fetch(webhookUrl, {
           method: 'POST',
