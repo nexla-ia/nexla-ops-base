@@ -4340,20 +4340,20 @@ export default function CompanyDashboard() {
       {/* Menu de contexto (clique direito) */}
       {contextMenu && (
         <div
-          className="fixed bg-white  rounded-lg shadow-2xl border border-slate-200  py-2 z-50 min-w-[200px] transition-colors duration-300"
+          className="fixed bg-white dark:bg-[#1a1f2e] rounded-lg shadow-2xl border border-slate-200 dark:border-[#313a4f] py-2 z-50 min-w-[200px]"
           style={{ top: contextMenu.y, left: contextMenu.x }}
           onClick={(e) => e.stopPropagation()}
         >
           <button
             onClick={() => handleContextMenuRename(contextMenu.phoneNumber)}
-            className="w-full px-4 py-2.5 text-left hover:bg-slate-50 transition-colors flex items-center gap-3 text-slate-700"
+            className="w-full px-4 py-2.5 text-left hover:bg-slate-100 dark:hover:bg-[#252b3b] transition-colors flex items-center gap-3 text-slate-700 dark:text-slate-300"
           >
             <Edit2 className="w-4 h-4" />
             Renomear contato
           </button>
           <button
             onClick={() => handleTogglePin(contextMenu.phoneNumber)}
-            className="w-full px-4 py-2.5 text-left hover:bg-slate-50  transition-colors flex items-center gap-3 text-slate-700 "
+            className="w-full px-4 py-2.5 text-left hover:bg-slate-100 dark:hover:bg-[#252b3b] transition-colors flex items-center gap-3 text-slate-700 dark:text-slate-300"
           >
             <Pin className="w-4 h-4" />
             {contactsDB.find(c => normalizeDbPhone(c.phone_number) === normalizeDbPhone(contextMenu.phoneNumber))?.pinned
@@ -4363,7 +4363,7 @@ export default function CompanyDashboard() {
           {aiEnabled && (
             <button
               onClick={() => handleToggleIA(contextMenu.phoneNumber)}
-              className="w-full px-4 py-2.5 text-left hover:bg-slate-50  transition-colors flex items-center gap-3 text-slate-700 "
+              className="w-full px-4 py-2.5 text-left hover:bg-slate-100 dark:hover:bg-[#252b3b] transition-colors flex items-center gap-3 text-slate-700 dark:text-slate-300"
             >
               <Bot className="w-4 h-4" />
               {contactsDB.find(c => normalizeDbPhone(c.phone_number) === normalizeDbPhone(contextMenu.phoneNumber))?.ia_ativada
@@ -4373,14 +4373,14 @@ export default function CompanyDashboard() {
           )}
           <button
             onClick={() => handleContextMenuTag(contextMenu.phoneNumber)}
-            className="w-full px-4 py-2.5 text-left hover:bg-slate-50  transition-colors flex items-center gap-3 text-slate-700 "
+            className="w-full px-4 py-2.5 text-left hover:bg-slate-100 dark:hover:bg-[#252b3b] transition-colors flex items-center gap-3 text-slate-700 dark:text-slate-300"
           >
             <Tag className="w-4 h-4" />
             Adicionar tag
           </button>
           <button
             onClick={() => handleContextMenuTransfer(contextMenu.phoneNumber)}
-            className="w-full px-4 py-2.5 text-left hover:bg-slate-50  transition-colors flex items-center gap-3 text-slate-700 "
+            className="w-full px-4 py-2.5 text-left hover:bg-slate-100 dark:hover:bg-[#252b3b] transition-colors flex items-center gap-3 text-slate-700 dark:text-slate-300"
           >
             <ArrowRightLeft className="w-4 h-4" />
             Transferir departamento
