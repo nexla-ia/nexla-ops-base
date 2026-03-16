@@ -19,6 +19,8 @@ type Company = {
   payment_notification_day?: number;
   plan_id?: string | null;
   additional_attendants?: number;
+  webhook_recebimento?: string | null;
+  webhook_envio?: string | null;
 };
 
 type Plan = {
@@ -90,6 +92,8 @@ export default function SuperAdminDashboard() {
   const [selectedPlanId, setSelectedPlanId] = useState<string>("");
   const [additionalAttendants, setAdditionalAttendants] = useState("0");
   const [paymentNotificationDay, setPaymentNotificationDay] = useState("5");
+  const [webhookRecebimento, setWebhookRecebimento] = useState("");
+  const [webhookEnvio, setWebhookEnvio] = useState("");
 
   // Modal and notifications
   const [deleteModal, setDeleteModal] = useState<{ isOpen: boolean; companyId: string; companyName: string }>({
@@ -269,7 +273,7 @@ export default function SuperAdminDashboard() {
 
     const { data, error } = await supabase
       .from("companies")
-      .select("id,api_key,name,phone_number,email,user_id,is_super_admin,created_at,max_attendants,payment_notification_day,plan_id,additional_attendants")
+      .select("id,api_key,name,phone_number,email,user_id,is_super_admin,created_at,max_attendants,payment_notification_day,plan_id,additional_attendants,webhook_recebimento,webhook_envio")
       .neq("is_super_admin", true)
       .order("created_at", { ascending: false });
 
@@ -403,6 +407,8 @@ export default function SuperAdminDashboard() {
       setSelectedPlanId("");
       setAdditionalAttendants("0");
       setPaymentNotificationDay("5");
+      setWebhookRecebimento("");
+      setWebhookEnvio("");
 
       await loadCompanies();
     } catch (err: any) {
@@ -516,6 +522,8 @@ export default function SuperAdminDashboard() {
     setSelectedPlanId(company.plan_id || "");
     setAdditionalAttendants(String(company.additional_attendants || 0));
     setPaymentNotificationDay(String(company.payment_notification_day || 5));
+    setWebhookRecebimento(company.webhook_recebimento || "");
+    setWebhookEnvio(company.webhook_envio || "");
     setShowForm(true);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -635,6 +643,8 @@ export default function SuperAdminDashboard() {
           plan_id: selectedPlanId || null,
           additional_attendants: parseInt(additionalAttendants) || 0,
           payment_notification_day: parseInt(paymentNotificationDay) || 5,
+          webhook_recebimento: webhookRecebimento.trim() || null,
+          webhook_envio: webhookEnvio.trim() || null,
         })
         .eq('id', editingCompany);
 
@@ -650,6 +660,8 @@ export default function SuperAdminDashboard() {
       setSelectedPlanId("");
       setAdditionalAttendants("0");
       setPaymentNotificationDay("5");
+      setWebhookRecebimento("");
+      setWebhookEnvio("");
 
       setNotification({
         type: 'success',
@@ -1194,6 +1206,34 @@ export default function SuperAdminDashboard() {
                       <p className="text-xs text-gray-500 mt-1">Dia do mês (1-31) para notificação</p>
                     </div>
 
+                    <div>
+                      <label className="block text-sm text-gray-700 mb-2">
+                        Webhook de Recebimento
+                      </label>
+                      <input
+                        type="url"
+                        className="w-full rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-gray-900 placeholder-gray-400 focus:border-teal-500 focus:outline-none focus:ring-2 focus:ring-teal-500/20"
+                        value={webhookRecebimento}
+                        onChange={(e) => setWebhookRecebimento(e.target.value)}
+                        placeholder="https://n8n.exemplo.com/webhook/recebimento"
+                      />
+                      <p className="text-xs text-gray-500 mt-1">URL chamada quando uma mensagem chegar para esta empresa</p>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm text-gray-700 mb-2">
+                        Webhook de Envio
+                      </label>
+                      <input
+                        type="url"
+                        className="w-full rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-gray-900 placeholder-gray-400 focus:border-teal-500 focus:outline-none focus:ring-2 focus:ring-teal-500/20"
+                        value={webhookEnvio}
+                        onChange={(e) => setWebhookEnvio(e.target.value)}
+                        placeholder="https://n8n.exemplo.com/webhook/envio"
+                      />
+                      <p className="text-xs text-gray-500 mt-1">URL chamada quando esta empresa enviar uma mensagem</p>
+                    </div>
+
                     <div className="flex items-center gap-3 mt-4">
                       <button
                         type="submit"
@@ -1215,6 +1255,8 @@ export default function SuperAdminDashboard() {
                           setPassword("");
                           setAdditionalAttendants("0");
                           setPaymentNotificationDay("5");
+                          setWebhookRecebimento("");
+                          setWebhookEnvio("");
                         }}
                         className="rounded-lg border border-gray-300 px-6 py-2.5 text-gray-700 hover:bg-gray-100 transition-colors"
                       >
