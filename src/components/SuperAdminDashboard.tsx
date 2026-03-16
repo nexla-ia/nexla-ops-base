@@ -21,6 +21,7 @@ type Company = {
   additional_attendants?: number;
   webhook_recebimento?: string | null;
   webhook_envio?: string | null;
+  webhook_contatos?: string | null;
 };
 
 type Plan = {
@@ -94,6 +95,7 @@ export default function SuperAdminDashboard() {
   const [paymentNotificationDay, setPaymentNotificationDay] = useState("5");
   const [webhookRecebimento, setWebhookRecebimento] = useState("");
   const [webhookEnvio, setWebhookEnvio] = useState("");
+  const [webhookContatos, setWebhookContatos] = useState("");
 
   // Modal and notifications
   const [deleteModal, setDeleteModal] = useState<{ isOpen: boolean; companyId: string; companyName: string }>({
@@ -273,7 +275,7 @@ export default function SuperAdminDashboard() {
 
     const { data, error } = await supabase
       .from("companies")
-      .select("id,api_key,name,phone_number,email,user_id,is_super_admin,created_at,max_attendants,payment_notification_day,plan_id,additional_attendants,webhook_recebimento,webhook_envio")
+      .select("id,api_key,name,phone_number,email,user_id,is_super_admin,created_at,max_attendants,payment_notification_day,plan_id,additional_attendants,webhook_recebimento,webhook_envio,webhook_contatos")
       .neq("is_super_admin", true)
       .order("created_at", { ascending: false });
 
@@ -524,6 +526,7 @@ export default function SuperAdminDashboard() {
     setPaymentNotificationDay(String(company.payment_notification_day || 5));
     setWebhookRecebimento(company.webhook_recebimento || "");
     setWebhookEnvio(company.webhook_envio || "");
+    setWebhookContatos(company.webhook_contatos || "");
     setShowForm(true);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -645,6 +648,7 @@ export default function SuperAdminDashboard() {
           payment_notification_day: parseInt(paymentNotificationDay) || 5,
           webhook_recebimento: webhookRecebimento.trim() || null,
           webhook_envio: webhookEnvio.trim() || null,
+          webhook_contatos: webhookContatos.trim() || null,
         })
         .eq('id', editingCompany);
 
@@ -662,6 +666,7 @@ export default function SuperAdminDashboard() {
       setPaymentNotificationDay("5");
       setWebhookRecebimento("");
       setWebhookEnvio("");
+      setWebhookContatos("");
 
       setNotification({
         type: 'success',
@@ -1238,6 +1243,20 @@ export default function SuperAdminDashboard() {
                       <p className="text-xs text-gray-500 mt-1">URL chamada quando esta empresa enviar uma mensagem</p>
                     </div>
 
+                    <div>
+                      <label className="block text-sm text-gray-700 mb-2">
+                        Webhook de Contatos
+                      </label>
+                      <input
+                        type="url"
+                        className="w-full rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-gray-900 placeholder-gray-400 focus:border-teal-500 focus:outline-none focus:ring-2 focus:ring-teal-500/20"
+                        value={webhookContatos}
+                        onChange={(e) => setWebhookContatos(e.target.value)}
+                        placeholder="https://n8n.exemplo.com/webhook/contatos"
+                      />
+                      <p className="text-xs text-gray-500 mt-1">URL chamada para buscar contatos do WhatsApp desta empresa</p>
+                    </div>
+
                     <div className="flex items-center gap-3 mt-4">
                       <button
                         type="submit"
@@ -1261,6 +1280,7 @@ export default function SuperAdminDashboard() {
                           setPaymentNotificationDay("5");
                           setWebhookRecebimento("");
                           setWebhookEnvio("");
+                          setWebhookContatos("");
                         }}
                         className="rounded-lg border border-gray-300 px-6 py-2.5 text-gray-700 hover:bg-gray-100 transition-colors"
                       >

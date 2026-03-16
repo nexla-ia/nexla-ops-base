@@ -1834,9 +1834,9 @@ export default function CompanyDashboard() {
     if (webhookContacts.length > 0) return;
     setLoadingWebhookContacts(true);
     try {
-      const webhookEnvio = company?.webhook_envio;
-      if (!webhookEnvio) { console.warn('⚠️ webhook_envio não cadastrado para esta empresa'); setLoadingWebhookContacts(false); return; }
-      const target = encodeURIComponent(webhookEnvio);
+      const webhookContatos = company?.webhook_contatos;
+      if (!webhookContatos) { console.warn('⚠️ webhook_contatos não cadastrado para esta empresa'); setLoadingWebhookContacts(false); return; }
+      const target = encodeURIComponent(webhookContatos);
       const proxyUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/webhook-proxy?url=${target}`;
       const response = await fetch(proxyUrl, {
         method: 'POST',

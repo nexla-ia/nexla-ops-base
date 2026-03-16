@@ -23,6 +23,7 @@ export interface Company {
   created_at: string;
   webhook_recebimento?: string | null;
   webhook_envio?: string | null;
+  webhook_contatos?: string | null;
 }
 
 export interface Message {
