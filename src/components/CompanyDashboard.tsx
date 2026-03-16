@@ -1722,22 +1722,26 @@ export default function CompanyDashboard() {
   const startConversationFromContact = async (wc: { name: string; phone: string }) => {
     if (!company?.id || !wc.phone) return;
     try {
-      const webhookEnvio = company?.webhook_envio;
+      const { data: companyRow } = await supabase
+        .from('companies')
+        .select('webhook_envio, api_key')
+        .eq('id', company.id)
+        .maybeSingle();
+      const webhookEnvio = companyRow?.webhook_envio;
       if (!webhookEnvio) { console.warn('⚠️ webhook_envio não cadastrado para esta empresa'); return; }
-      const target = encodeURIComponent(webhookEnvio);
-      const proxyUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/webhook-proxy?url=${target}`;
-      await fetch(proxyUrl, {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 10000);
+      await fetch(webhookEnvio, {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           numero: wc.phone,
           name: wc.name || '',
-          api_key: company.api_key,
+          api_key: companyRow.api_key,
         }),
+        signal: controller.signal,
       });
+      clearTimeout(timeout);
     } catch (err) {
       console.error('[iniciar-conversa] erro ao chamar webhook:', err);
     }
@@ -1876,21 +1880,30 @@ export default function CompanyDashboard() {
 
   const fetchWebhookContacts = async () => {
     setShowWebhookContactsModal(true);
-    if (webhookContacts.length > 0) return;
+    setWebhookContacts([]);
+    setWebhookContactsSearch('');
     setLoadingWebhookContacts(true);
     try {
-      const webhookContatos = company?.webhook_contatos;
-      if (!webhookContatos) { console.warn('⚠️ webhook_contatos não cadastrado para esta empresa'); setLoadingWebhookContacts(false); return; }
-      const target = encodeURIComponent(webhookContatos);
-      const proxyUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/webhook-proxy?url=${target}`;
-      const response = await fetch(proxyUrl, {
+      const { data: companyRow, error: companyErr } = await supabase
+        .from('companies')
+        .select('webhook_contatos, api_key')
+        .eq('id', company?.id)
+        .maybeSingle();
+      if (companyErr || !companyRow?.webhook_contatos) {
+        console.warn('⚠️ webhook_contatos não cadastrado para esta empresa');
+        setLoadingWebhookContacts(false);
+        return;
+      }
+      const webhookContatos = companyRow.webhook_contatos;
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 10000);
+      const response = await fetch(webhookContatos, {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ api_key: company?.api_key }),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ api_key: companyRow.api_key }),
+        signal: controller.signal,
       });
+      clearTimeout(timeout);
       if (!response.ok) {
         console.error('Webhook respondeu com erro:', response.status, response.statusText);
         return;
@@ -4183,10 +4196,10 @@ export default function CompanyDashboard() {
       {/* Modal de Transferir Departamento */}
       {showTransferModal && (
         <div className="fixed inset-0 bg-black/50 z-[9999] flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6 relative z-[10000]">
+          <div className="bg-white dark:bg-[#1e2436] rounded-xl shadow-2xl max-w-md w-full p-6 relative z-[10000]">
             <div className="flex items-center justify-between mb-6">
-              <h3 className="text-xl font-bold text-slate-900 flex items-center gap-2">
-                <ArrowRightLeft className="w-6 h-6 text-blue-600" />
+              <h3 className="text-xl font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                <ArrowRightLeft className="w-6 h-6 text-blue-500" />
                 Transferir Departamento
               </h3>
               <button
@@ -4195,7 +4208,7 @@ export default function CompanyDashboard() {
                   setDepartamentoTransferencia('');
                   setSetorTransferencia('');
                 }}
-                className="text-slate-400 hover:text-slate-600 transition-colors"
+                className="text-slate-400 hover:text-slate-200 transition-colors"
               >
                 <X className="w-6 h-6" />
               </button>
@@ -4203,7 +4216,7 @@ export default function CompanyDashboard() {
 
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">
+                <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-2">
                   Departamento de Destino
                 </label>
                 <select
@@ -4212,7 +4225,7 @@ export default function CompanyDashboard() {
                     setDepartamentoTransferencia(e.target.value);
                     setSetorTransferencia('');
                   }}
-                  className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all"
+                  className="w-full px-4 py-2.5 border border-slate-300 dark:border-[#313a4f] rounded-lg bg-white dark:bg-[#252b3b] text-slate-900 dark:text-slate-100 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-900/30 transition-all"
                 >
                   <option value="">Selecione um departamento</option>
                   {departments.map((dept) => (
@@ -4224,14 +4237,14 @@ export default function CompanyDashboard() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">
+                <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-2">
                   Setor (Opcional)
                 </label>
                 <select
                   value={setorTransferencia}
                   onChange={(e) => setSetorTransferencia(e.target.value)}
                   disabled={!departamentoTransferencia}
-                  className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all disabled:bg-slate-100 disabled:cursor-not-allowed"
+                  className="w-full px-4 py-2.5 border border-slate-300 dark:border-[#313a4f] rounded-lg bg-white dark:bg-[#252b3b] text-slate-900 dark:text-slate-100 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-900/30 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <option value="">Selecione um setor</option>
                   {sectorsFilteredTransfer.map((sector) => (
@@ -4250,7 +4263,7 @@ export default function CompanyDashboard() {
                   setDepartamentoTransferencia('');
                   setSetorTransferencia('');
                 }}
-                className="flex-1 px-4 py-2.5 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-all font-medium"
+                className="flex-1 px-4 py-2.5 border border-slate-300 dark:border-[#313a4f] text-slate-700 dark:text-slate-300 rounded-lg hover:bg-slate-50 dark:hover:bg-[#252b3b] transition-all font-medium"
               >
                 Cancelar
               </button>
