@@ -3036,60 +3036,78 @@ export default function CompanyDashboard() {
                         }
                       }}
                       onContextMenu={(e) => handleContextMenu(e, contact.phoneNumber)}
-                      className={`group cursor-pointer px-3 py-3 rounded-xl transition-all duration-150 ${
+                      className={`group cursor-pointer px-3 py-2.5 rounded-xl transition-all duration-150 ${
                         selectedContact === contact.phoneNumber
-                          ? 'bg-blue-600 shadow-lg shadow-blue-900/30'
-                          : 'hover:bg-[#252b3b] border border-transparent'
+                          ? 'bg-gradient-to-r from-blue-600 to-blue-500 shadow-lg shadow-blue-900/40'
+                          : 'hover:bg-[#252b3b]/80'
                       }`}
                     >
-                      <div className="flex items-start gap-3">
-                        <div className={`w-10 h-10 bg-gradient-to-br ${getAvatarColor(contact.name || contact.phoneNumber)} rounded-full flex items-center justify-center text-white font-bold text-sm flex-shrink-0 shadow-sm`}>
+                      <div className="flex items-center gap-3">
+                        {/* Avatar */}
+                        <div className={`w-10 h-10 bg-gradient-to-br ${getAvatarColor(contact.name || contact.phoneNumber)} rounded-full flex items-center justify-center text-white font-bold text-sm flex-shrink-0 shadow-md ring-2 ${selectedContact === contact.phoneNumber ? 'ring-white/20' : 'ring-white/5'}`}>
                           {contact.name ? contact.name[0].toUpperCase() : <User className="w-4 h-4" />}
                         </div>
+
+                        {/* Content */}
                         <div className="flex-1 min-w-0">
-                          <div className="flex items-center justify-between mb-1">
-                            <div className="flex items-center gap-1.5 flex-1 min-w-0">
-                              <h3 className={`font-semibold truncate text-sm ${selectedContact === contact.phoneNumber ? 'text-white' : 'text-slate-200'}`}>
+                          {/* Linha 1: nome + hora */}
+                          <div className="flex items-center justify-between mb-0.5">
+                            <div className="flex items-center gap-1.5 min-w-0">
+                              <h3 className={`font-semibold truncate text-sm leading-tight ${selectedContact === contact.phoneNumber ? 'text-white' : 'text-slate-100'}`}>
                                 {contact.name || getPhoneNumber(contact.phoneNumber)}
                               </h3>
                               {contactsDB.find(c => normalizeDbPhone(c.phone_number) === normalizeDbPhone(contact.phoneNumber))?.pinned && (
-                                <Pin className="w-3.5 h-3.5 text-blue-500 flex-shrink-0" fill="currentColor" />
+                                <Pin className="w-3 h-3 text-blue-400 flex-shrink-0" fill="currentColor" />
                               )}
                             </div>
-                            <div className="flex flex-col items-end gap-1 ml-2 flex-shrink-0">
-                              <span className={`text-[10px] font-medium ${selectedContact === contact.phoneNumber ? 'text-blue-200' : 'text-slate-500'}`}>
-                                {formatTime(contact.lastMessageTime)}
-                              </span>
-                              {(() => {
-                                const contactDB = contactsDB.find(c => normalizeDbPhone(c.phone_number) === normalizeDbPhone(contact.phoneNumber));
-                                const isOpen = contactDB?.ticket_status !== 'finalizado';
-                                return (
-                                  <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold tracking-wide ${
-                                    selectedContact === contact.phoneNumber
-                                      ? isOpen
-                                        ? 'bg-emerald-400/40 text-emerald-200'
-                                        : 'bg-red-400/40 text-red-200'
-                                      : isOpen
-                                        ? 'bg-emerald-500/20 text-emerald-400'
-                                        : 'bg-slate-700 text-slate-400'
-                                  }`}>
-                                    <span className={`w-1.5 h-1.5 rounded-full ${
-                                      selectedContact === contact.phoneNumber
-                                        ? isOpen ? 'bg-emerald-300' : 'bg-red-300'
-                                        : isOpen ? 'bg-emerald-400' : 'bg-slate-500'
-                                    }`} />
-                                    {isOpen ? 'Aberto' : 'Fechado'}
-                                  </span>
-                                );
-                              })()}
-                            </div>
+                            <span className={`text-[10px] font-medium ml-2 flex-shrink-0 ${selectedContact === contact.phoneNumber ? 'text-blue-100/80' : 'text-slate-500'}`}>
+                              {formatTime(contact.lastMessageTime)}
+                            </span>
                           </div>
-                          <div className="flex items-center justify-between gap-2">
-                            <p className={`text-xs truncate flex-1 ${selectedContact === contact.phoneNumber ? 'text-blue-100/80' : 'text-slate-500'}`}>
+
+                          {/* Linha 2: última mensagem + badge + unread */}
+                          <div className="flex items-center gap-1.5">
+                            <p className={`text-xs truncate flex-1 min-w-0 ${selectedContact === contact.phoneNumber ? 'text-blue-100/70' : 'text-slate-500'}`}>
                               {contact.lastMessage}
                             </p>
+                            {(() => {
+                              const contactDB = contactsDB.find(c => normalizeDbPhone(c.phone_number) === normalizeDbPhone(contact.phoneNumber));
+                              const isOpen = contactDB?.ticket_status !== 'finalizado';
+                              const sel = selectedContact === contact.phoneNumber;
+                              return (
+                                <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[9px] font-bold uppercase tracking-wide flex-shrink-0 border ${
+                                  sel
+                                    ? isOpen
+                                      ? 'bg-emerald-500/20 border-emerald-400 text-emerald-300'
+                                      : 'bg-red-500/20 border-red-400 text-red-300'
+                                    : isOpen
+                                      ? 'bg-emerald-500/10 border-emerald-500/40 text-emerald-400'
+                                      : 'bg-red-500/10 border-red-500/40 text-red-400'
+                                }`}
+                                style={sel ? {
+                                  boxShadow: isOpen
+                                    ? '0 0 6px #10b981, 0 0 14px #10b98166, inset 0 0 6px #10b98133'
+                                    : '0 0 6px #ef4444, 0 0 14px #ef444466, inset 0 0 6px #ef444433'
+                                } : {
+                                  boxShadow: isOpen
+                                    ? '0 0 4px #10b98144'
+                                    : '0 0 4px #ef444444'
+                                }}>
+                                  <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${isOpen ? 'animate-pulse' : ''} ${
+                                    sel
+                                      ? isOpen ? 'bg-emerald-300 shadow-[0_0_4px_#10b981]' : 'bg-red-300 shadow-[0_0_4px_#ef4444]'
+                                      : isOpen ? 'bg-emerald-400' : 'bg-red-400'
+                                  }`} />
+                                  {isOpen ? 'Aberto' : 'Fechado'}
+                                </span>
+                              );
+                            })()}
                             {contact.unreadCount > 0 && (
-                            <span className="ml-2 bg-blue-600 text-white text-[10px] font-bold rounded-full min-w-[18px] h-[18px] px-1 flex items-center justify-center flex-shrink-0">
+                              <span className={`text-[10px] font-bold rounded-full min-w-[18px] h-[18px] px-1 flex items-center justify-center flex-shrink-0 ${
+                                selectedContact === contact.phoneNumber
+                                  ? 'bg-white text-blue-600'
+                                  : 'bg-blue-500 text-white'
+                              }`}>
                                 {contact.unreadCount > 9 ? '9+' : contact.unreadCount}
                               </span>
                             )}
