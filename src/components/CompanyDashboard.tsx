@@ -2263,36 +2263,31 @@ export default function CompanyDashboard() {
       apikey_instancia: company.api_key,
     };
 
-    // Busca o webhook cadastrado para esta empresa diretamente do banco
-    supabase.from('companies').select('webhook_envio').eq('id', company.id).single()
-      .then(({ data: cData }) => {
-        const webhookUrl = cData?.webhook_envio;
-        if (!webhookUrl) {
-          console.warn('⚠️ Nenhum webhook_envio cadastrado para esta empresa.');
-          return;
-        }
-        const webhookController = new AbortController();
-        const webhookTimeout = setTimeout(() => webhookController.abort(), 10000);
-        fetch(webhookUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(webhookPayload),
-          signal: webhookController.signal,
+    // Usa webhook_envio cadastrado para esta empresa (disponível no contexto)
+    const webhookUrl = company?.webhook_envio;
+    if (webhookUrl) {
+      const webhookController = new AbortController();
+      const webhookTimeout = setTimeout(() => webhookController.abort(), 10000);
+      fetch(webhookUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(webhookPayload),
+        signal: webhookController.signal,
+      })
+        .then(res => {
+          clearTimeout(webhookTimeout);
+          if (!res.ok) console.error('Erro ao enviar para webhook:', res.status);
+          else console.log('✅ Webhook enviado com sucesso');
         })
-          .then(res => {
-            clearTimeout(webhookTimeout);
-            if (!res.ok) console.error('Erro ao enviar para webhook:', res.status);
-            else console.log('✅ Webhook enviado com sucesso');
-          })
-          .catch((webhookError: any) => {
-            clearTimeout(webhookTimeout);
-            if (webhookError?.name === 'AbortError') {
-              console.warn('⚠️ Webhook timeout (10s)');
-            } else {
-              console.error('Erro ao chamar webhook:', webhookError);
-            }
-          });
-      });
+        .catch((webhookError: any) => {
+          clearTimeout(webhookTimeout);
+          if (webhookError?.name === 'AbortError') {
+            console.warn('⚠️ Webhook timeout (10s)');
+          } else {
+            console.error('Erro ao chamar webhook:', webhookError);
+          }
+        });
+    }
   };
 
   const handleContextMenu = (e: React.MouseEvent, phoneNumber: string) => {
