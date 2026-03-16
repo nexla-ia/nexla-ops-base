@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback, useRef, ReactNode } from 'react';
 import { supabase } from '../lib/supabase';
 
 interface ThemeSettings {
@@ -36,6 +36,7 @@ const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [settings, setSettings] = useState<ThemeSettings>(defaultSettings);
   const [companyId, setCompanyId] = useState<string | null>(null);
+  const loadedCompanyIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     document.documentElement.style.setProperty('--color-primary', settings.primaryColor);
@@ -73,7 +74,9 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const loadCompanyTheme = async (id: string) => {
+  const loadCompanyTheme = useCallback(async (id: string) => {
+    if (loadedCompanyIdRef.current === id) return;
+    loadedCompanyIdRef.current = id;
     try {
       setCompanyId(id);
 
@@ -102,7 +105,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
         setSettings(defaultSettings);
       }
 
-      const channel = supabase
+      supabase
         .channel(`theme_settings:${id}`)
         .on(
           'postgres_changes',
@@ -136,7 +139,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     } catch (error) {
       console.error('Error loading company theme:', error);
     }
-  };
+  }, []);
 
   const updateSettings = async (newSettings: Partial<ThemeSettings>) => {
     const merged = { ...settings, ...newSettings };

@@ -69,6 +69,11 @@ function AppContent() {
 }
 
 function App() {
+  useEffect(() => {
+    const mode = localStorage.getItem('colorMode') || 'dark';
+    document.documentElement.classList.toggle('dark', mode === 'dark');
+  }, []);
+
   return (
     <AuthProvider>
       <ThemeProvider>

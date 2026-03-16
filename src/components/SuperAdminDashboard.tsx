@@ -908,7 +908,7 @@ export default function SuperAdminDashboard() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-gray-100">
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-gray-100 dark:from-[#0d1117] dark:to-[#0b0f14]">
         <div className="text-center">
           <div className="text-4xl font-bold bg-gradient-to-r from-teal-500 to-teal-600 bg-clip-text text-transparent mb-4">
             NEXLA
@@ -920,11 +920,11 @@ export default function SuperAdminDashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-gray-100 flex">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-gray-100 dark:from-[#0d1117] dark:to-[#0b0f14] flex">
       <aside
         className={`${
           sidebarOpen ? "w-64" : "w-20"
-        } bg-white/80 backdrop-blur-xl border-r border-gray-200/50 transition-all duration-300 flex flex-col relative shadow-lg`}
+        } bg-white/80 dark:bg-[#1a1f2e]/90 backdrop-blur-xl border-r border-gray-200/50 dark:border-[#252b3b] transition-all duration-300 flex flex-col relative shadow-lg`}
       >
         <div className="p-6 border-b border-gray-200/50">
           <div className="flex items-center justify-between">

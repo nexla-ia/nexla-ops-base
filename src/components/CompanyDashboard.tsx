@@ -139,7 +139,7 @@ function getAvatarColor(input: string): string {
 type TabType = 'mensagens' | 'departamentos' | 'setores' | 'atendentes' | 'tags' | 'agente' | 'historico' | 'meu-plano' | 'configuracoes' | 'contatos';
 
 export default function CompanyDashboard() {
-  const { company, signOut } = useAuth();
+  const { company, signOut, attendant } = useAuth();
   const { settings } = useTheme();
   const aiEnabled = useAiEnabled(company?.id || null);
   const [activeTab, setActiveTab] = useState<TabType>('mensagens');
@@ -228,6 +228,9 @@ export default function CompanyDashboard() {
   const [showTransferModal, setShowTransferModal] = useState(false);
   const [showTagModal, setShowTagModal] = useState(false);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; phoneNumber: string } | null>(null);
+  const [showRenameModal, setShowRenameModal] = useState(false);
+  const [renamePhone, setRenamePhone] = useState('');
+  const [renameValue, setRenameValue] = useState('');
   const [departments, setDepartments] = useState<Department[]>([]);
 
   // ✅ ID do departamento "Recepção" (criado automaticamente no banco)
@@ -288,6 +291,29 @@ export default function CompanyDashboard() {
   const [showAddContactModal, setShowAddContactModal] = useState(false);
   const [newContactName, setNewContactName] = useState('');
   const [newContactPhone, setNewContactPhone] = useState('');
+  const [newContactDdi, setNewContactDdi] = useState('55');
+  const [showDdiDropdown, setShowDdiDropdown] = useState(false);
+
+  const DDI_OPTIONS = [
+    { code: '55',  flag: '🇧🇷', label: 'BR', digits: [10, 11] },
+    { code: '1',   flag: '🇺🇸', label: 'US', digits: [10] },
+    { code: '351', flag: '🇵🇹', label: 'PT', digits: [9] },
+    { code: '54',  flag: '🇦🇷', label: 'AR', digits: [10] },
+    { code: '595', flag: '🇵🇾', label: 'PY', digits: [9] },
+    { code: '598', flag: '🇺🇾', label: 'UY', digits: [8] },
+    { code: '56',  flag: '🇨🇱', label: 'CL', digits: [9] },
+    { code: '57',  flag: '🇨🇴', label: 'CO', digits: [10] },
+    { code: '58',  flag: '🇻🇪', label: 'VE', digits: [10] },
+    { code: '591', flag: '🇧🇴', label: 'BO', digits: [8] },
+    { code: '593', flag: '🇪🇨', label: 'EC', digits: [9] },
+    { code: '51',  flag: '🇵🇪', label: 'PE', digits: [9] },
+    { code: '34',  flag: '🇪🇸', label: 'ES', digits: [9] },
+    { code: '44',  flag: '🇬🇧', label: 'GB', digits: [10] },
+    { code: '49',  flag: '🇩🇪', label: 'DE', digits: [10, 11] },
+    { code: '33',  flag: '🇫🇷', label: 'FR', digits: [9] },
+    { code: '39',  flag: '🇮🇹', label: 'IT', digits: [9, 10] },
+    { code: '52',  flag: '🇲🇽', label: 'MX', digits: [10] },
+  ];
   const [addingContact, setAddingContact] = useState(false);
   const [showAllContactsModal, setShowAllContactsModal] = useState(false);
   const [allContactsList, setAllContactsList] = useState<{ id: string; name: string; phone_number: string; last_message_time?: string; ticket_status?: string }[]>([]);
@@ -1746,21 +1772,28 @@ export default function CompanyDashboard() {
       return;
     }
 
-    if (!phone || phone.length < 10) {
-      alert('❌ Digite um número de telefone válido (mínimo 10 dígitos)!');
+    const ddiOption = DDI_OPTIONS.find(d => d.code === newContactDdi);
+    if (!phone || !ddiOption?.digits.includes(phone.length)) {
+      const expected = ddiOption?.digits.join(' ou ') ?? '10';
+      alert(`❌ Número inválido! Digite ${expected} dígitos para ${ddiOption?.label ?? 'este país'}.`);
       return;
     }
 
-    // Remover o 9 a mais após o DDD se o número tiver 11 dígitos
-    if (phone.length === 11) {
-      // Padrão brasileiro: DDD (2 dígitos) + 9 + 8 dígitos = 11 total
-      // Remover o 9 após o DDD
+    const ddi = newContactDdi.replace(/\D/g, '');
+
+    // Para Brasil (55): remover o 9 extra após DDD se tiver 11 dígitos
+    if (ddi === '55' && phone.length === 11) {
       phone = phone.substring(0, 2) + phone.substring(3);
+    }
+
+    // Adicionar DDI selecionado se o número ainda não começar com ele
+    if (!phone.startsWith(ddi)) {
+      phone = ddi + phone;
     }
 
     setAddingContact(true);
     try {
-      await supabase.from('contacts').upsert(
+      const { data: upsertedRows } = await supabase.from('contacts').upsert(
         {
           company_id: company.id,
           phone_number: phone,
@@ -1768,28 +1801,36 @@ export default function CompanyDashboard() {
           last_message_time: new Date().toISOString(),
         },
         { onConflict: 'company_id,phone_number', ignoreDuplicates: false }
-      );
+      ).select('id, name, phone_number, last_message_time');
 
-      // Adicionar o novo contato à lista de contatos se ele não existir
-      const newContact = {
-        id: `${company.id}_${phone}`,
-        name: name,
-        phone_number: phone,
-        last_message_time: new Date().toISOString(),
-        ticket_status: 'aberto'
-      };
-      
-      setAllContactsList(prev => {
-        const exists = prev.some(c => c.phone_number === phone);
-        if (exists) {
-          return prev;
+      const savedContact = upsertedRows?.[0];
+      if (!savedContact) {
+        // fallback: buscar do banco
+        const { data: fetched } = await supabase
+          .from('contacts')
+          .select('id, name, phone_number, last_message_time')
+          .eq('company_id', company.id)
+          .eq('phone_number', phone)
+          .single();
+        if (fetched) {
+          setAllContactsList(prev => {
+            const exists = prev.some(c => c.phone_number === phone);
+            if (exists) return prev;
+            return [{ ...fetched, ticket_status: 'aberto' }, ...prev];
+          });
         }
-        return [newContact, ...prev];
-      });
+      } else {
+        setAllContactsList(prev => {
+          const exists = prev.some(c => c.phone_number === phone);
+          if (exists) return prev;
+          return [{ ...savedContact, ticket_status: 'aberto' }, ...prev];
+        });
+      }
 
       setShowAddContactModal(false);
       setNewContactName('');
       setNewContactPhone('');
+      setNewContactDdi('55');
       setPendingNewContact({ name, phone });
       setSelectedContact(phone);
       setActiveTab('contatos');
@@ -2176,6 +2217,14 @@ export default function CompanyDashboard() {
     }
   }, [contextMenu]);
 
+  useEffect(() => {
+    if (showDdiDropdown) {
+      const handleClick = () => setShowDdiDropdown(false);
+      document.addEventListener('click', handleClick);
+      return () => document.removeEventListener('click', handleClick);
+    }
+  }, [showDdiDropdown]);
+
   // Contar mensagens pendentes (novas mensagens que não foram vistas)
   useEffect(() => {
     if (!selectedContact || !selectedContactData?.messages) {
@@ -2427,6 +2476,33 @@ export default function CompanyDashboard() {
     closeContextMenu();
   };
 
+  const handleContextMenuRename = (phoneNumber: string) => {
+    const contact = contactsDB.find(c => normalizeDbPhone(c.phone_number) === normalizeDbPhone(phoneNumber));
+    setRenamePhone(phoneNumber);
+    setRenameValue(contact?.name || '');
+    setShowRenameModal(true);
+    closeContextMenu();
+  };
+
+  const handleRenameContact = async () => {
+    if (!renameValue.trim()) return;
+    try {
+      const contact = contactsDB.find(c => normalizeDbPhone(c.phone_number) === normalizeDbPhone(renamePhone));
+      if (!contact) return;
+      const { error } = await supabase
+        .from('contacts')
+        .update({ name: renameValue.trim() })
+        .eq('id', contact.id);
+      if (error) throw error;
+      setShowRenameModal(false);
+      setToastMessage('Nome do contato atualizado!');
+      setShowToast(true);
+    } catch (err: any) {
+      setToastMessage(`Erro ao renomear: ${err.message}`);
+      setShowToast(true);
+    }
+  };
+
   const fileToBase64 = (file: File): Promise<string> => {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
@@ -2517,7 +2593,20 @@ export default function CompanyDashboard() {
 
     setIsDeletingContact(true);
     try {
-      const contactId = deleteModal.contact.id;
+      let contactId = deleteModal.contact.id;
+      const phone_number = deleteModal.contact.phone_number;
+
+      // Se o ID não for UUID válido (ex: id falso gerado localmente), busca o real pelo phone
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      if (!uuidRegex.test(contactId)) {
+        const { data: found } = await supabase
+          .from('contacts')
+          .select('id')
+          .eq('phone_number', phone_number)
+          .single();
+        if (!found?.id) throw new Error('Contato não encontrado no banco de dados');
+        contactId = found.id;
+      }
 
       // Use the database function to delete contact and all associated messages
       const { data: rpcData, error: rpcError } = await supabase.rpc('delete_contact_and_messages', {
@@ -2531,19 +2620,24 @@ export default function CompanyDashboard() {
         throw new Error(result.message || 'Falha ao apagar o contato');
       }
 
+      const deletedPhone = phone_number;
+
+      // Deletar mensagens do banco diretamente pelo numero (garante que o RPC não deixou sobras)
+      const phoneDigits = deletedPhone.replace(/\D/g, '');
+      await supabase.from('messages').delete().or(`numero.eq.${deletedPhone},numero.eq.${phoneDigits},numero.eq.${deletedPhone}@s.whatsapp.net`);
+      await supabase.from('sent_messages').delete().or(`numero.eq.${deletedPhone},numero.eq.${phoneDigits}`);
+
       // Atualizar lista de contatos
-      setAllContactsList(prev => prev.filter(c => c.id !== contactId));
+      setAllContactsList(prev => prev.filter(c => c.phone_number !== deletedPhone && c.id !== contactId));
 
       // Atualizar contactsDB (para aba de mensagens)
-      setContactsDB(prev => prev.filter(c => c.id !== contactId));
+      setContactsDB(prev => prev.filter(c => c.phone_number !== deletedPhone && c.id !== contactId));
 
-      // Limpar seleção se era esse contato
-      if (selectedContact) {
-        const still = contactsDB.find(c => normalizePhone(c.phone_number) === normalizePhone(selectedContact));
-        if (!still) {
-          setSelectedContact(null);
-          setPendingNewContact(null);
-        }
+      // Limpar seleção e mensagens se era o contato ativo
+      if (selectedContact && normalizePhone(deletedPhone) === normalizePhone(selectedContact)) {
+        setSelectedContact(null);
+        setPendingNewContact(null);
+        setMessages([]);
       }
 
       handleCloseDeleteModal();
@@ -2627,7 +2721,7 @@ export default function CompanyDashboard() {
     const file = e.target.files?.[0];
     if (file) {
       setSelectedFile(file);
-      setFilePreview(null);
+      setFilePreview(URL.createObjectURL(file));
     }
     e.target.value = '';
   };
@@ -2668,7 +2762,7 @@ export default function CompanyDashboard() {
   const messageGroups = groupMessagesByDate(currentMessages);
 
   return (
-    <div className="h-screen flex flex-col bg-gradient-to-br from-slate-50 via-blue-50/30 to-slate-50 overflow-hidden pt-14">
+    <div className="h-screen flex flex-col bg-gradient-to-br from-slate-50 via-blue-50/30 to-slate-50 dark:from-[#0d1117] dark:via-[#0d1117] dark:to-[#0b0f14] overflow-hidden pt-14">
       {showToast && (
         <Toast
           message={toastMessage}
@@ -2712,22 +2806,63 @@ export default function CompanyDashboard() {
                 <label className="block text-sm font-medium text-slate-700 mb-2">
                   Número do Telefone *
                 </label>
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  value={newContactPhone}
-                  onChange={(e) => {
-                    // Aceitar apenas números
-                    const value = e.target.value.replace(/\D/g, '');
-                    setNewContactPhone(value);
-                  }}
-                  placeholder="Ex: 6999999999"
-                  className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:border-green-400 focus:ring-2 focus:ring-green-100 transition-all font-mono"
-                  disabled={addingContact}
-                />
-                <p className="text-xs text-slate-500 mt-1">
-                  Digite apenas números (DDD + telefone). Se digitar 11 dígitos, remove o 9 automaticamente
-                </p>
+                {(() => {
+                  const selectedDdi = DDI_OPTIONS.find(d => d.code === newContactDdi)!;
+                  const digits = newContactPhone.length;
+                  const valid = selectedDdi.digits.includes(digits);
+                  const hasInput = digits > 0;
+                  const max = Math.max(...selectedDdi.digits);
+                  const borderClass = hasInput ? (valid ? 'border-green-400 ring-2 ring-green-100' : 'border-red-400 ring-2 ring-red-100') : 'border-slate-200';
+                  return (
+                    <div className="flex gap-2 items-stretch">
+                      <div className="relative">
+                        <button
+                          type="button"
+                          onClick={() => setShowDdiDropdown(prev => !prev)}
+                          disabled={addingContact}
+                          className="h-full flex items-center gap-1.5 px-3 py-2 border border-slate-200 rounded-lg bg-white hover:bg-slate-50 transition-all text-sm whitespace-nowrap font-medium text-slate-700"
+                        >
+                          <span className="font-mono">+{newContactDdi}</span>
+                          <svg className="w-3 h-3 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+                        </button>
+                        {showDdiDropdown && (
+                          <div className="absolute top-full left-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-xl z-50 max-h-60 overflow-y-auto min-w-[140px]">
+                            {DDI_OPTIONS.map(opt => (
+                              <button
+                                key={opt.code}
+                                type="button"
+                                onClick={() => { setNewContactDdi(opt.code); setNewContactPhone(''); setShowDdiDropdown(false); }}
+                                className={`flex items-center justify-between w-full px-3 py-2 text-sm transition-colors first:rounded-t-xl last:rounded-b-xl ${newContactDdi === opt.code ? 'bg-green-50 text-green-700 font-semibold' : 'text-slate-700 hover:bg-slate-50'}`}
+                              >
+                                <span className="font-medium">{opt.label}</span>
+                                <span className="font-mono text-slate-400 text-xs">+{opt.code}</span>
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex-1 relative">
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          value={newContactPhone}
+                          onChange={(e) => {
+                            const value = e.target.value.replace(/\D/g, '').slice(0, max);
+                            setNewContactPhone(value);
+                          }}
+                          placeholder={`${selectedDdi.digits.join(' ou ')} dígitos`}
+                          className={`w-full px-3 py-2 border rounded-lg focus:outline-none transition-all font-mono ${borderClass}`}
+                          disabled={addingContact}
+                        />
+                        {hasInput && (
+                          <span className={`absolute right-3 top-1/2 -translate-y-1/2 text-xs font-mono ${valid ? 'text-green-500' : 'text-red-400'}`}>
+                            {digits}/{max}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })()}
               </div>
 
               <div className="flex gap-3 pt-2">
@@ -2762,7 +2897,7 @@ export default function CompanyDashboard() {
       )}
 
       <ProfileDropdown
-        userName={settings.companyName || company?.name || 'Empresa'}
+        userName={attendant?.name || company?.display_name || company?.name || 'Usuário'}
         onHistoryClick={() => setActiveTab('historico')}
         onSettingsClick={() => setActiveTab('configuracoes')}
         onLogout={signOut}
@@ -2818,10 +2953,10 @@ export default function CompanyDashboard() {
                   )}
                   {settings.companyName && (
                     <div className="flex-1 min-w-0">
-                      <h2 className="text-sm font-bold text-slate-900 truncate">
+                      <h2 className="text-sm font-bold text-white truncate">
                         {settings.companyName}
                       </h2>
-                      <p className="text-xs text-slate-600">
+                      <p className="text-xs text-slate-400">
                         Identidade da Empresa
                       </p>
                     </div>
@@ -2932,15 +3067,15 @@ export default function CompanyDashboard() {
                                   <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold tracking-wide ${
                                     selectedContact === contact.phoneNumber
                                       ? isOpen
-                                        ? 'bg-white/20 text-white'
-                                        : 'bg-white/10 text-blue-200'
+                                        ? 'bg-emerald-400/40 text-emerald-200'
+                                        : 'bg-red-400/40 text-red-200'
                                       : isOpen
                                         ? 'bg-emerald-500/20 text-emerald-400'
                                         : 'bg-slate-700 text-slate-400'
                                   }`}>
                                     <span className={`w-1.5 h-1.5 rounded-full ${
                                       selectedContact === contact.phoneNumber
-                                        ? 'bg-white/70'
+                                        ? isOpen ? 'bg-emerald-300' : 'bg-red-300'
                                         : isOpen ? 'bg-emerald-400' : 'bg-slate-500'
                                     }`} />
                                     {isOpen ? 'Aberto' : 'Fechado'}
@@ -3083,12 +3218,125 @@ export default function CompanyDashboard() {
               const effectiveName = selectedContactDataWithDB?.name || pendingNewContact?.name || '';
               const effectivePhone = selectedContactDataWithDB?.phoneNumber || pendingNewContact?.phone || selectedContact || '';
               return (
-            <>
-              <header className="bg-white border-b border-slate-200 px-4 py-3 flex items-center justify-between shadow-sm">
+            <div className="relative flex-1 flex flex-col overflow-hidden">
+              {/* Overlay WhatsApp-style quando documento selecionado */}
+              {selectedFile && !selectedFile.type.startsWith('image/') && (
+                <div className="absolute inset-0 z-20 bg-[#0b0f14] flex flex-col">
+                  {/* Topo */}
+                  <div className="flex items-center justify-between px-4 py-3 bg-[#111827]">
+                    <button
+                      onClick={clearSelectedFile}
+                      className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-white/10 text-white transition-all"
+                    >
+                      <X className="w-5 h-5" />
+                    </button>
+                    <div className="text-center">
+                      <p className="text-white text-sm font-medium truncate max-w-[220px]">{selectedFile.name}</p>
+                      <p className="text-slate-400 text-xs">
+                        {selectedFile.size < 1024 * 1024
+                          ? `${(selectedFile.size / 1024).toFixed(1)} KB`
+                          : `${(selectedFile.size / (1024 * 1024)).toFixed(1)} MB`}
+                        {' · '}{selectedFile.type.split('/')[1]?.toUpperCase() || 'Arquivo'}
+                      </p>
+                    </div>
+                    <div className="w-9" />
+                  </div>
+
+                  {/* Preview do documento */}
+                  <div className="flex-1 overflow-hidden">
+                    {filePreview ? (
+                      <iframe
+                        src={filePreview}
+                        title={selectedFile.name}
+                        className="w-full h-full border-0"
+                      />
+                    ) : (
+                      <div className="flex-1 flex items-center justify-center h-full">
+                        <div className="text-center">
+                          <div className="w-20 h-20 rounded-2xl bg-blue-600/20 flex items-center justify-center mx-auto mb-4">
+                            <FileText className="w-10 h-10 text-blue-400" />
+                          </div>
+                          <p className="text-white font-medium">{selectedFile.name}</p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Rodapé: legenda + enviar */}
+                  <div className="bg-[#111827] px-4 py-3 flex items-center gap-3">
+                    <input
+                      type="text"
+                      value={messageText}
+                      onChange={(e) => setMessageText(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === 'Enter') handleSendMessage(); }}
+                      placeholder="Adicionar legenda..."
+                      autoFocus
+                      className="flex-1 bg-[#1e2633] text-white text-sm px-4 py-2.5 rounded-full border border-[#2e3650] focus:outline-none focus:border-blue-500 placeholder-slate-500 transition-all"
+                    />
+                    <button
+                      onClick={handleSendMessage}
+                      disabled={sending}
+                      className="w-11 h-11 rounded-full flex items-center justify-center shadow-lg disabled:opacity-50 transition-all hover:scale-105 active:scale-95"
+                      style={{ backgroundColor: settings.messageBubbleSentColor || '#3b82f6' }}
+                    >
+                      {sending ? <Loader2 className="w-5 h-5 text-white animate-spin" /> : <Send className="w-5 h-5 text-white" />}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Overlay WhatsApp-style quando imagem selecionada */}
+              {selectedFile && selectedFile.type.startsWith('image/') && filePreview && (
+                <div className="absolute inset-0 z-20 bg-[#0b0f14] flex flex-col">
+                  {/* Topo */}
+                  <div className="flex items-center justify-between px-4 py-3 bg-[#111827]">
+                    <button
+                      onClick={clearSelectedFile}
+                      className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-white/10 text-white transition-all"
+                    >
+                      <X className="w-5 h-5" />
+                    </button>
+                    <span className="text-white text-sm font-medium truncate max-w-[200px]">{selectedFile.name}</span>
+                    <div className="w-9" />
+                  </div>
+
+                  {/* Imagem centralizada */}
+                  <div className="flex-1 flex items-center justify-center px-6 py-4 overflow-hidden">
+                    <img
+                      src={filePreview}
+                      alt="Preview"
+                      className="max-h-full max-w-full object-contain rounded-xl shadow-2xl"
+                    />
+                  </div>
+
+                  {/* Rodapé: legenda + enviar */}
+                  <div className="bg-[#111827] px-4 py-3 flex items-center gap-3">
+                    <input
+                      type="text"
+                      value={imageCaption}
+                      onChange={(e) => setImageCaption(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === 'Enter') handleSendMessage(); }}
+                      placeholder="Adicionar legenda..."
+                      autoFocus
+                      className="flex-1 bg-[#1e2633] text-white text-sm px-4 py-2.5 rounded-full border border-[#2e3650] focus:outline-none focus:border-blue-500 placeholder-slate-500 transition-all"
+                    />
+                    <button
+                      onClick={handleSendMessage}
+                      disabled={sending}
+                      className="w-11 h-11 rounded-full flex items-center justify-center shadow-lg disabled:opacity-50 transition-all hover:scale-105 active:scale-95"
+                      style={{ backgroundColor: settings.messageBubbleSentColor || '#3b82f6' }}
+                    >
+                      {sending ? <Loader2 className="w-5 h-5 text-white animate-spin" /> : <Send className="w-5 h-5 text-white" />}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              <header className="bg-[#1a1f2e] px-4 py-3 flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <button
                     onClick={() => setSidebarOpen(true)}
-                    className="md:hidden p-2 text-slate-500 hover:bg-slate-100 rounded-lg transition-all"
+                    className="md:hidden p-2 text-slate-300 hover:bg-[#252b3b] rounded-lg transition-all"
                   >
                     <Menu className="w-5 h-5" />
                   </button>
@@ -3096,10 +3344,10 @@ export default function CompanyDashboard() {
                     {effectiveName ? effectiveName[0].toUpperCase() : <User className="w-5 h-5" />}
                   </div>
                   <div>
-                    <h2 className="font-bold text-slate-900 text-[15px] leading-tight">
+                    <h2 className="font-bold text-white text-[15px] leading-tight">
                       {effectiveName || getPhoneNumber(effectivePhone)}
                     </h2>
-                    <p className="text-xs text-slate-500 font-mono mt-0.5 tracking-tight">
+                    <p className="text-xs font-mono mt-0.5 tracking-tight" style={{ color: settings.messageBubbleSentColor || '#3b82f6' }}>
                       {getPhoneNumber(effectivePhone)}
                     </p>
                     <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
@@ -3145,7 +3393,7 @@ export default function CompanyDashboard() {
                       setSetorTransferencia('');
                       setShowTransferModal(true);
                     }}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-600 dark:text-slate-300 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg transition-all"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-300 bg-[#252b3b] hover:bg-[#2e3650] border border-[#2e3650] rounded-lg transition-all"
                     title="Transferir departamento"
                   >
                     <ArrowRightLeft className="w-4 h-4" />
@@ -3157,7 +3405,7 @@ export default function CompanyDashboard() {
                       setSelectedTags(currentContact?.tag_ids || []);
                       setShowTagModal(true);
                     }}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-600 dark:text-slate-300 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg transition-all"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-300 bg-[#252b3b] hover:bg-[#2e3650] border border-[#2e3650] rounded-lg transition-all"
                     title="Gerenciar tags"
                   >
                     <Tag className="w-4 h-4" />
@@ -3500,54 +3748,8 @@ export default function CompanyDashboard() {
                 </button>
               )}
 
-              <div className="bg-white px-4 py-3 border-t border-slate-200/80">
-                {filePreview && (
-                  <div className="mb-3 px-4 py-3 bg-blue-50/80 backdrop-blur-sm border border-blue-200/50 rounded-xl">
-                    <div className="flex items-start gap-3">
-                      <img src={filePreview} alt="Preview" className="w-20 h-20 object-cover rounded-lg" />
-                      <div className="flex-1">
-                        <p className="text-xs text-blue-600 mb-1 font-medium">Imagem selecionada</p>
-                        <p className="text-xs text-gray-600">{selectedFile?.name}</p>
-                        <button
-                          onClick={clearSelectedFile}
-                          className="text-xs text-red-500 hover:text-red-700 mt-2 font-medium"
-                        >
-                          Remover imagem
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                )}
+              <div className="bg-[#1a1f2e] px-4 py-3">
 
-                {selectedFile && selectedFile.type.startsWith('image/') && (
-                  <div className="mb-3">
-                    <input
-                      type="text"
-                      value={imageCaption}
-                      onChange={(e) => setImageCaption(e.target.value)}
-                      placeholder="Legenda para imagem (opcional)"
-                      className="w-full px-4 py-2.5 text-sm bg-white/60 border border-gray-200/50 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-400 focus:bg-white transition-all placeholder-gray-400"
-                    />
-                  </div>
-                )}
-
-                {selectedFile && !selectedFile.type.startsWith('image/') && (
-                  <div className="mb-3 px-4 py-3 bg-gray-50/80 backdrop-blur-sm border border-gray-200/50 rounded-xl">
-                    <div className="flex items-center gap-3">
-                      <FileText className="w-8 h-8 text-gray-400" />
-                      <div className="flex-1">
-                        <p className="text-xs text-gray-600 mb-1 font-medium">Arquivo selecionado</p>
-                        <p className="text-xs text-gray-600">{selectedFile?.name}</p>
-                        <button
-                          onClick={clearSelectedFile}
-                          className="text-xs text-red-500 hover:text-red-700 mt-2 font-medium"
-                        >
-                          Remover arquivo
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                )}
 
                 <div className="flex items-center gap-3">
                   <input
@@ -3568,7 +3770,7 @@ export default function CompanyDashboard() {
                   <button
                     onClick={() => imageInputRef.current?.click()}
                     disabled={sending || !!selectedFile}
-                    className="p-2 text-slate-400 dark:text-slate-500 hover:text-blue-500 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-slate-800 rounded-lg transition-all disabled:opacity-40"
+                    className="p-2 text-slate-400 hover:text-blue-400 hover:bg-[#252b3b] rounded-lg transition-all disabled:opacity-40"
                     title="Enviar imagem"
                   >
                     <ImageIcon className="w-5 h-5" />
@@ -3576,13 +3778,13 @@ export default function CompanyDashboard() {
                   <button
                     onClick={() => fileInputRef.current?.click()}
                     disabled={sending || !!selectedFile}
-                    className="p-2 text-slate-400 dark:text-slate-500 hover:text-blue-500 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-slate-800 rounded-lg transition-all disabled:opacity-40"
+                    className="p-2 text-slate-400 hover:text-blue-400 hover:bg-[#252b3b] rounded-lg transition-all disabled:opacity-40"
                     title="Enviar arquivo"
                   >
                     <Paperclip className="w-5 h-5" />
                   </button>
 
-                  <div className="flex-1 bg-slate-50 dark:bg-slate-800 rounded-2xl flex items-center px-4 py-2.5 border border-slate-200 dark:border-slate-600 focus-within:border-blue-400 dark:focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-100 dark:focus-within:ring-blue-900/40 transition-all">
+                  <div className="flex-1 bg-[#252b3b] rounded-2xl flex items-center px-4 py-2.5 border border-[#2e3650] focus-within:border-blue-500 transition-all">
                     <textarea
                       ref={messageInputRef as React.RefObject<HTMLTextAreaElement>}
                       rows={1}
@@ -3598,7 +3800,7 @@ export default function CompanyDashboard() {
                       }}
                       placeholder="Digite uma mensagem ou arraste um arquivo…"
                       disabled={sending}
-                      className="flex-1 bg-transparent text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none disabled:opacity-50 text-sm resize-none leading-relaxed"
+                      className="flex-1 bg-transparent text-white placeholder-slate-500 focus:outline-none disabled:opacity-50 text-sm resize-none leading-relaxed"
                     />
                     <EmojiPicker
                       onSelect={(emoji) => setMessageText(prev => prev + emoji)}
@@ -3608,7 +3810,8 @@ export default function CompanyDashboard() {
                   <button
                     onClick={handleSendMessage}
                     disabled={(!messageText.trim() && !selectedFile) || sending}
-                    className="w-10 h-10 bg-blue-500 hover:bg-blue-600 rounded-xl transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center shadow-sm hover:scale-105 active:scale-95"
+                    className="w-10 h-10 rounded-xl transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center shadow-sm hover:scale-105 active:scale-95"
+                    style={{ backgroundColor: settings.messageBubbleSentColor || '#3b82f6' }}
                     title="Enviar mensagem"
                   >
                     {sending || uploadingFile ? (
@@ -3625,7 +3828,7 @@ export default function CompanyDashboard() {
                   </div>
                 )}
               </div>
-            </>
+            </div>
               );
             })()
           ) : activeTab === 'mensagens' ? (
@@ -3917,7 +4120,7 @@ export default function CompanyDashboard() {
               />
             </div>
           ) : activeTab === 'configuracoes' ? (
-            <div key="configuracoes" className="flex-1 animate-in fade-in slide-in-from-bottom-2 duration-200">
+            <div key="configuracoes" className="flex-1 overflow-y-auto animate-in fade-in slide-in-from-bottom-2 duration-200">
               <SettingsPage />
             </div>
           ) : null}
@@ -4124,6 +4327,13 @@ export default function CompanyDashboard() {
           onClick={(e) => e.stopPropagation()}
         >
           <button
+            onClick={() => handleContextMenuRename(contextMenu.phoneNumber)}
+            className="w-full px-4 py-2.5 text-left hover:bg-slate-50 transition-colors flex items-center gap-3 text-slate-700"
+          >
+            <Edit2 className="w-4 h-4" />
+            Renomear contato
+          </button>
+          <button
             onClick={() => handleTogglePin(contextMenu.phoneNumber)}
             className="w-full px-4 py-2.5 text-left hover:bg-slate-50  transition-colors flex items-center gap-3 text-slate-700 "
           >
@@ -4157,6 +4367,28 @@ export default function CompanyDashboard() {
             <ArrowRightLeft className="w-4 h-4" />
             Transferir departamento
           </button>
+        </div>
+      )}
+
+      {/* Modal renomear contato */}
+      {showRenameModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setShowRenameModal(false)}>
+          <div className="bg-[#1e2436] border border-[#2e3650] rounded-2xl shadow-2xl p-6 w-full max-w-sm mx-4" onClick={e => e.stopPropagation()}>
+            <h3 className="text-white font-bold text-base mb-4">Renomear contato</h3>
+            <input
+              type="text"
+              value={renameValue}
+              onChange={e => setRenameValue(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') handleRenameContact(); if (e.key === 'Escape') setShowRenameModal(false); }}
+              placeholder="Nome do contato"
+              autoFocus
+              className="w-full bg-[#252b3b] text-white text-sm px-4 py-2.5 rounded-xl border border-[#313a4f] focus:outline-none focus:border-blue-500 placeholder-slate-500 mb-4"
+            />
+            <div className="flex gap-2 justify-end">
+              <button onClick={() => setShowRenameModal(false)} className="px-4 py-2 text-sm text-slate-400 hover:text-white transition-colors">Cancelar</button>
+              <button onClick={handleRenameContact} className="px-4 py-2 text-sm font-semibold bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-all">Salvar</button>
+            </div>
+          </div>
         </div>
       )}
 

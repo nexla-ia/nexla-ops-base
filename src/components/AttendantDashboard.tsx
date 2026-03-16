@@ -1681,7 +1681,7 @@ export default function AttendantDashboard() {
 
   if (loading) {
     return (
-      <div className="h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-blue-100">
+      <div className="h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-blue-100 dark:from-[#0d1117] dark:to-[#0b0f14]">
         <div className="text-center">
           <Loader2 className="w-12 h-12 text-blue-600 animate-spin mx-auto mb-4" />
           <p className="text-gray-600 font-medium">Carregando...</p>
@@ -1691,7 +1691,7 @@ export default function AttendantDashboard() {
   }
 
   return (
-    <div className="h-screen flex flex-col bg-gradient-to-br from-slate-50 via-blue-50/30 to-slate-50 dark:from-black dark:via-black dark:to-black transition-colors duration-300 pt-14">
+    <div className="h-screen flex flex-col bg-gradient-to-br from-slate-50 via-blue-50/30 to-slate-50 dark:from-[#0d1117] dark:via-[#0d1117] dark:to-[#0b0f14] transition-colors duration-300 pt-14">
       {/* Toast */}
       {showToast && (
         <Toast
@@ -1719,7 +1719,7 @@ export default function AttendantDashboard() {
         {currentView === 'historico' ? (
           <TicketHistory onOpenChat={handleOpenChatFromHistory} />
         ) : currentView === 'contatos' ? (
-          <div className="flex-1 bg-gradient-to-br from-slate-50 via-blue-50/30 to-slate-50 overflow-y-auto">
+          <div className="flex-1 bg-gradient-to-br from-slate-50 via-blue-50/30 to-slate-50 dark:from-[#0d1117] dark:via-[#0d1117] dark:to-[#0b0f14] overflow-y-auto">
             {(() => {
 
               const totalContatos = allContactsList.length;
@@ -2114,7 +2114,7 @@ export default function AttendantDashboard() {
             />
           </div>
         ) : currentView === 'transferencias' ? (
-          <div className="flex-1 bg-gradient-to-br from-slate-50 via-blue-50/30 to-slate-50 overflow-y-auto">
+          <div className="flex-1 bg-gradient-to-br from-slate-50 via-blue-50/30 to-slate-50 dark:from-[#0d1117] dark:via-[#0d1117] dark:to-[#0b0f14] overflow-y-auto">
             <div className="w-full p-6">
               <div className="mb-6">
                 <h2 className="text-3xl font-bold text-slate-900">Transferir Contatos</h2>

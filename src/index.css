@@ -8,9 +8,88 @@
   }
 
   body {
-    @apply antialiased bg-white text-slate-900;
+    @apply antialiased bg-white text-slate-900 dark:bg-[#0d1117] dark:text-slate-100;
   }
 }
+
+/* ─────────────────────────────────────────────────────────────
+   Modo Claro — sobrescreve as cores hardcoded do tema escuro
+   ───────────────────────────────────────────────────────────── */
+
+html:not(.dark) .bg-\[#1a1f2e\]  { background-color: #f1f5f9 !important; }
+html:not(.dark) .bg-\[#252b3b\]  { background-color: #e2e8f0 !important; }
+html:not(.dark) .bg-\[#0d1117\]  { background-color: #f8fafc !important; }
+html:not(.dark) .bg-\[#0b0f14\]  { background-color: #f8fafc !important; }
+html:not(.dark) .bg-\[#111827\]  { background-color: #eef2f7 !important; }
+html:not(.dark) .bg-\[#1e2436\]  { background-color: #ffffff !important; }
+html:not(.dark) .bg-\[#1e2633\]  { background-color: #eef2f7 !important; }
+html:not(.dark) .bg-\[#313a4f\]  { background-color: #dde3ec !important; }
+
+/* Bordas */
+html:not(.dark) .border-\[#252b3b\] { border-color: #cbd5e1 !important; }
+html:not(.dark) .border-\[#2e3650\] { border-color: #cbd5e1 !important; }
+html:not(.dark) .border-\[#313a4f\] { border-color: #cbd5e1 !important; }
+
+/* Texto quase-branco → escuro no modo claro */
+html:not(.dark) .text-slate-200  { color: #475569 !important; }
+html:not(.dark) .text-slate-300  { color: #475569 !important; }
+
+/* text-white dentro dos painéis escuros → escuro */
+html:not(.dark) .bg-\[#1a1f2e\] .text-white,
+html:not(.dark) .bg-\[#252b3b\] .text-white { color: #1e293b !important; }
+
+/* Exceção: restaura branco em botões coloridos dentro dos painéis */
+html:not(.dark) .bg-blue-500,   html:not(.dark) .bg-blue-500 *   { color: #ffffff !important; }
+html:not(.dark) .bg-blue-600,   html:not(.dark) .bg-blue-600 *   { color: #ffffff !important; }
+html:not(.dark) .bg-blue-700,   html:not(.dark) .bg-blue-700 *   { color: #ffffff !important; }
+html:not(.dark) .bg-emerald-500,html:not(.dark) .bg-emerald-500 * { color: #ffffff !important; }
+html:not(.dark) .bg-emerald-600,html:not(.dark) .bg-emerald-600 * { color: #ffffff !important; }
+
+/* Input / textarea no modo claro */
+html:not(.dark) .bg-\[#252b3b\] input,
+html:not(.dark) .bg-\[#252b3b\] textarea { color: #1e293b !important; }
+html:not(.dark) .bg-\[#1e2633\] input    { color: #1e293b !important; }
+
+/* Scrollbar no modo claro */
+html:not(.dark) .scrollbar-thin::-webkit-scrollbar-track { background: #e2e8f0; }
+html:not(.dark) .scrollbar-thin::-webkit-scrollbar-thumb { background: #94a3b8; border-radius: 4px; }
+
+/* ─────────────────────────────────────────────────────────────
+   Modo Escuro — sobrescreve classes Tailwind padrão (brancas/claras)
+   usadas no SuperAdminDashboard e outras telas
+   ───────────────────────────────────────────────────────────── */
+
+.dark .bg-white          { background-color: #1e2436 !important; }
+.dark .bg-white\/80      { background-color: rgba(26, 31, 46, 0.9) !important; }
+.dark .bg-slate-50       { background-color: #252b3b !important; }
+.dark .bg-gray-100       { background-color: #252b3b !important; }
+.dark .bg-gray-50        { background-color: #252b3b !important; }
+
+.dark .border-gray-200,
+.dark .border-gray-200\/50,
+.dark .border-gray-300   { border-color: #313a4f !important; }
+
+.dark .text-gray-900,
+.dark .text-gray-800     { color: #f1f5f9 !important; }
+.dark .text-gray-700     { color: #cbd5e1 !important; }
+.dark .text-gray-600     { color: #94a3b8 !important; }
+.dark .text-gray-500     { color: #64748b !important; }
+.dark .text-gray-400     { color: #475569 !important; }
+
+/* Inputs/selects padrão no modo escuro */
+.dark input:not([class*="bg-"]),
+.dark select:not([class*="bg-"]),
+.dark textarea:not([class*="bg-"]) {
+  background-color: #252b3b !important;
+  color: #f1f5f9 !important;
+  border-color: #313a4f !important;
+}
+
+/* Exceção: não escurecer botões/badges coloridos */
+.dark .bg-teal-500, .dark .bg-teal-600,
+.dark .bg-green-500, .dark .bg-green-600,
+.dark .bg-red-500, .dark .bg-red-600,
+.dark .bg-purple-500, .dark .bg-purple-600 { background-color: revert !important; }
 
 @layer utilities {
   /* Animations */

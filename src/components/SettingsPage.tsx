@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Palette, Building2, Upload, X, RotateCcw, Check, Save, MessageSquare } from 'lucide-react';
+import { Palette, Building2, Upload, X, RotateCcw, Check, Save, MessageSquare, Sun, Moon } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
 
 const inputCls =
@@ -102,6 +102,15 @@ export default function SettingsPage() {
   const [savedMsg, setSavedMsg] = useState('');
   const [hasChanges, setHasChanges] = useState(false);
   const isInit = useRef(false);
+  const [colorMode, setColorMode] = useState<'light' | 'dark'>(
+    () => (localStorage.getItem('colorMode') || 'dark') as 'light' | 'dark'
+  );
+
+  const toggleColorMode = (mode: 'light' | 'dark') => {
+    setColorMode(mode);
+    localStorage.setItem('colorMode', mode);
+    document.documentElement.classList.toggle('dark', mode === 'dark');
+  };
 
   const [form, setForm] = useState({
     companyName:                    settings.companyName                    || '',
@@ -157,7 +166,7 @@ export default function SettingsPage() {
   };
 
   return (
-    <div className="p-6 w-full">
+    <div className="p-6 w-full bg-slate-50 dark:bg-[#0d1117] min-h-full">
 
       {/* Toast */}
       {savedMsg && (
@@ -268,6 +277,38 @@ export default function SettingsPage() {
                   </div>
                 </div>
 
+              </div>
+            </Card>
+
+            {/* Modo claro/escuro */}
+            <Card title="Modo de exibição" desc="Alterne entre tema claro e escuro" icon={Sun}>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => toggleColorMode('light')}
+                  className={`flex-1 flex flex-col items-center gap-2 px-4 py-4 rounded-xl border-2 transition-all ${
+                    colorMode === 'light'
+                      ? 'border-blue-500 bg-blue-50 dark:bg-blue-500/10'
+                      : 'border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600'
+                  }`}
+                >
+                  <Sun className={`w-6 h-6 ${colorMode === 'light' ? 'text-blue-500' : 'text-slate-400'}`} />
+                  <span className={`text-sm font-medium ${colorMode === 'light' ? 'text-blue-600 dark:text-blue-400' : 'text-slate-500 dark:text-slate-400'}`}>
+                    Claro
+                  </span>
+                </button>
+                <button
+                  onClick={() => toggleColorMode('dark')}
+                  className={`flex-1 flex flex-col items-center gap-2 px-4 py-4 rounded-xl border-2 transition-all ${
+                    colorMode === 'dark'
+                      ? 'border-blue-500 bg-blue-50 dark:bg-blue-500/10'
+                      : 'border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600'
+                  }`}
+                >
+                  <Moon className={`w-6 h-6 ${colorMode === 'dark' ? 'text-blue-500' : 'text-slate-400'}`} />
+                  <span className={`text-sm font-medium ${colorMode === 'dark' ? 'text-blue-600 dark:text-blue-400' : 'text-slate-500 dark:text-slate-400'}`}>
+                    Escuro
+                  </span>
+                </button>
               </div>
             </Card>
 
