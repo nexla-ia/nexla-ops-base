@@ -7,7 +7,7 @@ import DepartmentsManagement from './DepartmentsManagement';
 import SectorsManagement from './SectorsManagement';
 import AttendantsManagement from './AttendantsManagement';
 import TagsManagement from './TagsManagement';
-import AgentConfig from './AgentConfig';
+import AgentConfig from './Agentconfig';
 import TicketHistory from './TicketHistory';
 import SettingsPage from './SettingsPage';
 import MyPlan from './MyPlan';
