@@ -1406,6 +1406,37 @@ export default function AttendantDashboard() {
         throw insertError;
       }
 
+      // Dispara webhook de envio cadastrado para esta empresa
+      const webhookUrl = company?.webhook_envio;
+      if (webhookUrl) {
+        const webhookController = new AbortController();
+        const webhookTimeout = setTimeout(() => webhookController.abort(), 10000);
+        fetch(webhookUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            numero: selectedContact,
+            message: rawMessage,
+            caption: rawCaption,
+            tipomessage: messageData.tipomessage || 'conversation',
+            base64: messageData.base64 || null,
+            urlimagem: messageData.urlimagem || null,
+            urlpdf: messageData.urlpdf || null,
+            idmessage: generatedIdMessage,
+            pushname: attendantName,
+            instancia: instanciaValue,
+            apikey_instancia: attendant.api_key,
+            timestamp: newMessage.date_time,
+          }),
+          signal: webhookController.signal,
+        })
+          .then(() => clearTimeout(webhookTimeout))
+          .catch((e: any) => {
+            clearTimeout(webhookTimeout);
+            if (e?.name !== 'AbortError') console.error('Erro ao chamar webhook envio:', e);
+          });
+      }
+
       // Adicionar à lista local imediatamente
       setMessages((prev) => [...prev, newMessage as Message]);
 
