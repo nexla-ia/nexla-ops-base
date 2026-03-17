@@ -43,6 +43,7 @@ interface ContactDB {
   ticket_status?: string;
   ticket_closed_at?: string | null;
   ticket_closed_by?: string | null;
+  attendant_id?: string | null;
 }
 
 interface Department {
@@ -125,6 +126,7 @@ export default function AttendantDashboard() {
   const [error, setError] = useState<string | null>(null);
   const [selectedContact, setSelectedContact] = useState<string | null>(null);
   const [contactFilter, setContactFilter] = useState<'todos' | 'departamento' | 'abertos'>('abertos');
+  const [attendantsList, setAttendantsList] = useState<{id: string; user_id: string; name: string}[]>([]);
   const [hasMoreMessages, setHasMoreMessages] = useState(true);
   const [loadingMoreMessages, setLoadingMoreMessages] = useState(false);
 
@@ -547,6 +549,7 @@ export default function AttendantDashboard() {
           ticket_status,
           ticket_closed_at,
           ticket_closed_by,
+          attendant_id,
           contact_tags(tag_id)
         `)
         .eq('company_id', attendant.company_id)
@@ -600,6 +603,20 @@ export default function AttendantDashboard() {
     }
   }, [attendant?.company_id]);
 
+  const fetchAttendants = useCallback(async () => {
+    if (!attendant?.company_id) return;
+    try {
+      const { data } = await supabase
+        .from('attendants')
+        .select('id, user_id, name')
+        .eq('company_id', attendant.company_id)
+        .eq('is_active', true);
+      setAttendantsList(data || []);
+    } catch (e) {
+      console.error('Erro ao carregar atendentes:', e);
+    }
+  }, [attendant?.company_id]);
+
   const fetchTags = async () => {
     if (!attendant?.company_id) return;
     try {
@@ -650,6 +667,7 @@ export default function AttendantDashboard() {
     fetchContacts();
     fetchDepartments();
     fetchSectors();
+    fetchAttendants();
     fetchTags();
   }, [attendant?.company_id, fetchMessages]);
 
@@ -873,7 +891,10 @@ export default function AttendantDashboard() {
     if (contactFilter === 'abertos') {
       filtered = filtered.filter(contact => {
         const contactDB = contactsDB.find(c => normalizeDbPhone(c.phone_number) === normalizeDbPhone(contact.phoneNumber));
-        return contactDB?.ticket_status === 'aberto' || contactDB?.ticket_status === 'em_processo' || !contactDB?.ticket_status;
+        // Só mostrar contatos do departamento que não foram assumidos por ninguém
+        const inDepartment = contact.department_id === attendant?.department_id;
+        const notAssumed = !contactDB?.attendant_id && (contactDB?.ticket_status === 'aberto' || !contactDB?.ticket_status);
+        return inDepartment && notAssumed;
       });
     }
 
@@ -1117,25 +1138,27 @@ export default function AttendantDashboard() {
       const { error: updateError } = await supabase
         .from('contacts')
         .update({
-          ticket_status: 'finalizado',
-          ticket_closed_at: new Date().toISOString(),
-          ticket_closed_by: user?.id || null
+          ticket_status: 'aberto',
+          ticket_closed_at: null,
+          ticket_closed_by: null,
+          attendant_id: null
         })
         .eq('id', contactDB.id)
         .eq('company_id', attendant.company_id);
 
       if (updateError) throw updateError;
 
-      setToastMessage('✅ Atendimento finalizado com sucesso!');
+      setToastMessage('✅ Atendimento finalizado — conversa voltou para Abertos');
       setShowToast(true);
 
       setContactsDB(prev => prev.map(c =>
         c.id === contactDB.id
           ? {
               ...c,
-              ticket_status: 'finalizado',
-              ticket_closed_at: new Date().toISOString(),
-              ticket_closed_by: user?.id || null
+              ticket_status: 'aberto',
+              ticket_closed_at: null,
+              ticket_closed_by: null,
+              attendant_id: null
             }
           : c
       ));
@@ -1167,7 +1190,8 @@ export default function AttendantDashboard() {
         .update({
           ticket_status: 'aberto',
           ticket_closed_at: null,
-          ticket_closed_by: null
+          ticket_closed_by: null,
+          attendant_id: null
         })
         .eq('id', contactDB.id)
         .eq('company_id', attendant.company_id);
@@ -1183,7 +1207,8 @@ export default function AttendantDashboard() {
               ...c,
               ticket_status: 'aberto',
               ticket_closed_at: null,
-              ticket_closed_by: null
+              ticket_closed_by: null,
+              attendant_id: null
             }
           : c
       ));
@@ -1194,6 +1219,60 @@ export default function AttendantDashboard() {
       setToastMessage('❌ Erro ao reabrir chamado');
       setShowToast(true);
     }
+  };
+
+  const handleAssumeContact = async (phoneNumber: string) => {
+    if (!attendant) return;
+
+    const contactDB = contactsDB.find(c => normalizeDbPhone(c.phone_number) === normalizeDbPhone(phoneNumber));
+    if (!contactDB) return;
+
+    if (contactDB.attendant_id) {
+      setToastMessage('❌ Esta conversa já foi assumida por outro atendente');
+      setShowToast(true);
+      return;
+    }
+
+    const deptName = departments.find(d => d.id === attendant.department_id)?.name || 'seu departamento';
+
+    const { error } = await supabase
+      .from('contacts')
+      .update({ ticket_status: 'em_processo', attendant_id: attendant.user_id })
+      .eq('id', contactDB.id)
+      .is('attendant_id', null);
+
+    if (error) {
+      setToastMessage('❌ Não foi possível assumir a conversa');
+      setShowToast(true);
+      return;
+    }
+
+    // Mensagem de sistema registrando a assunção
+    await supabase.from('messages').insert({
+      numero: phoneNumber,
+      apikey_instancia: attendant.api_key,
+      company_id: attendant.company_id,
+      department_id: attendant.department_id,
+      sector_id: null,
+      message: `Conversa assumida pelo atendente ${attendant.name} do departamento ${deptName}`,
+      message_type: 'system_transfer',
+      tipomessage: 'system',
+      date_time: new Date().toISOString(),
+      idmessage: `system_assume_${Date.now()}`,
+      instancia: attendant.name,
+      'minha?': 'false',
+      sender: null,
+      pushname: 'Sistema',
+    });
+
+    setContactsDB(prev => prev.map(c =>
+      c.id === contactDB.id ? { ...c, ticket_status: 'em_processo', attendant_id: attendant.user_id } : c
+    ));
+
+    setSelectedContact(phoneNumber);
+    setContactFilter('departamento');
+    setToastMessage('✅ Conversa assumida com sucesso!');
+    setShowToast(true);
   };
 
   const handleOpenChatFromHistory = (phoneNumber: string) => {
@@ -2280,7 +2359,7 @@ export default function AttendantDashboard() {
                     : 'text-slate-400 hover:text-slate-200'
                 }`}
               >
-                Todos
+                Recepção
               </button>
               <button
                 onClick={() => setContactFilter('abertos')}
@@ -2314,7 +2393,7 @@ export default function AttendantDashboard() {
                   <MessageSquare className="w-8 h-8 text-slate-500" />
                 </div>
                 <p className="text-slate-400 text-sm text-center font-medium">
-                  {searchTerm ? 'Nenhum contato encontrado' : contactFilter === 'departamento' ? 'Não há contatos no seu departamento' : contactFilter === 'abertos' ? 'Não há chamados abertos' : 'Nenhuma conversa ainda'}
+                  {searchTerm ? 'Nenhum contato encontrado' : contactFilter === 'departamento' ? 'Não há contatos no seu departamento' : contactFilter === 'abertos' ? 'Não há conversas aguardando atendimento' : 'Nenhuma conversa ainda'}
                 </p>
               </div>
             ) : (
@@ -2438,48 +2517,69 @@ export default function AttendantDashboard() {
                 </div>
 
                 {/* Botões de Ação */}
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => setShowTransferModal(true)}
-                    className="px-4 py-2 text-sm font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition-all flex items-center gap-2 shadow-sm"
-                    title="Transferir departamento"
-                  >
-                    <ArrowRightLeft className="w-4 h-4" />
-                    Transferir
-                  </button>
-                  <button
-                    onClick={() => setShowTagModal(true)}
-                    className="px-4 py-2 text-sm font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition-all flex items-center gap-2 shadow-sm"
-                    title="Adicionar tag"
-                  >
-                    <Tag className="w-4 h-4" />
-                    Tags
-                  </button>
-                  {(() => {
-                    const currentContact = contactsDB.find(c => normalizeDbPhone(c.phone_number) === normalizeDbPhone(selectedContactData?.phoneNumber || ''));
-                    const isFinalized = currentContact?.ticket_status === 'finalizado';
+                {(() => {
+                  const currentContact = contactsDB.find(c => normalizeDbPhone(c.phone_number) === normalizeDbPhone(selectedContactData?.phoneNumber || ''));
+                  const notAssumed = !currentContact?.attendant_id;
+                  const assumedByMe = currentContact?.attendant_id === attendant?.user_id;
+                  const isFinalized = currentContact?.ticket_status === 'finalizado';
 
-                    return isFinalized ? (
+                  // Conversa ainda não assumida — mostrar só "Iniciar Conversa"
+                  if (notAssumed && !isFinalized) {
+                    return (
                       <button
-                        onClick={handleReopenTicket}
-                        className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-all flex items-center gap-2 shadow-sm"
-                        title="Abrir chamado"
-                      >
-                        <FolderOpen className="w-4 h-4" />
-                        <span className="hidden sm:inline">Abrir Chamado</span>
-                      </button>
-                    ) : (
-                      <button
-                        onClick={handleCloseTicket}
-                        className="px-4 py-2 text-sm font-medium text-white bg-green-600 hover:bg-green-700 rounded-lg transition-all flex items-center gap-2 shadow-sm"
-                        title="Finalizar atendimento"
+                        onClick={() => handleAssumeContact(selectedContactData.phoneNumber)}
+                        className="px-5 py-2 text-sm font-semibold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg transition-all flex items-center gap-2 shadow-sm"
                       >
                         <CheckCircle2 className="w-4 h-4" />
-                        <span className="hidden sm:inline">Finalizar</span>
+                        Iniciar Conversa
                       </button>
                     );
-                  })()}
-                </div>
+                  }
+
+                  // Assumida pelo atendente atual (ou finalizada) — botões normais
+                  if (assumedByMe || isFinalized) {
+                    return (
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => setShowTransferModal(true)}
+                          className="px-4 py-2 text-sm font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition-all flex items-center gap-2 shadow-sm"
+                          title="Transferir departamento"
+                        >
+                          <ArrowRightLeft className="w-4 h-4" />
+                          Transferir
+                        </button>
+                        <button
+                          onClick={() => setShowTagModal(true)}
+                          className="px-4 py-2 text-sm font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition-all flex items-center gap-2 shadow-sm"
+                          title="Adicionar tag"
+                        >
+                          <Tag className="w-4 h-4" />
+                          Tags
+                        </button>
+                        {isFinalized ? (
+                          <button
+                            onClick={handleReopenTicket}
+                            className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-all flex items-center gap-2 shadow-sm"
+                          >
+                            <FolderOpen className="w-4 h-4" />
+                            <span className="hidden sm:inline">Abrir Chamado</span>
+                          </button>
+                        ) : (
+                          <button
+                            onClick={handleCloseTicket}
+                            className="px-4 py-2 text-sm font-medium text-white bg-green-600 hover:bg-green-700 rounded-lg transition-all flex items-center gap-2 shadow-sm"
+                          >
+                            <CheckCircle2 className="w-4 h-4" />
+                            <span className="hidden sm:inline">Finalizar</span>
+                          </button>
+                        )}
+                      </div>
+                    );
+                  }
+
+                  // Assumida por outro — sem botões de ação
+                  return null;
+                })()}
               </div>
 
               {/* Messages Area */}
@@ -2789,10 +2889,38 @@ export default function AttendantDashboard() {
                 </div>
               )}
 
+              {/* Banner: conversa assumida por outro atendente */}
+                {(() => {
+                  const cDB = contactsDB.find(c => normalizeDbPhone(c.phone_number) === normalizeDbPhone(selectedContactData.phoneNumber));
+                  const isAssumedByOther = cDB?.attendant_id && cDB.attendant_id !== attendant?.user_id;
+                  if (!isAssumedByOther) return null;
+                  const attendingName = attendantsList.find(a => a.user_id === cDB?.attendant_id)?.name || 'outro atendente';
+                  return (
+                    <div className="px-4 py-3 bg-amber-900/30 border-t border-amber-700/40 flex items-center gap-2">
+                      <AlertCircle className="w-4 h-4 text-amber-400 flex-shrink-0" />
+                      <p className="text-sm text-amber-300">
+                        Esta conversa está sendo atendida por <strong>{attendingName}</strong>
+                      </p>
+                    </div>
+                  );
+                })()}
+
               {/* Message Input ou Botão Assumir Conversa */}
               <div className="border-t p-4" style={{ backgroundColor: "#1a1f2e", borderColor: "#252b3b" }}>
+                {(() => {
+                  const cDB = contactsDB.find(c => normalizeDbPhone(c.phone_number) === normalizeDbPhone(selectedContactData.phoneNumber));
+                  const notAssumed = !cDB?.attendant_id && cDB?.ticket_status !== 'finalizado';
+                  if (notAssumed) {
+                    return (
+                      <div className="flex items-center justify-center py-3">
+                        <p className="text-sm text-slate-500">Clique em <strong className="text-slate-300">Iniciar Conversa</strong> para começar o atendimento</p>
+                      </div>
+                    );
+                  }
+                  return null;
+                })()}
                 {selectedContactData && !isContactFromMyDepartment ? (
-                  // Mostrar botão para assumir conversa
+                  // Mostrar botão para assumir conversa (outro departamento)
                   <div className="flex flex-col items-center gap-3 py-4">
                     <div className="text-center">
                       <p className="text-sm text-slate-300 mb-2">
@@ -2810,8 +2938,8 @@ export default function AttendantDashboard() {
                       Assumir Conversa
                     </button>
                   </div>
-                ) : (
-                  // Input normal de mensagem
+                ) : contactsDB.find(c => normalizeDbPhone(c.phone_number) === normalizeDbPhone(selectedContactData.phoneNumber))?.attendant_id || contactsDB.find(c => normalizeDbPhone(c.phone_number) === normalizeDbPhone(selectedContactData.phoneNumber))?.ticket_status === 'finalizado' ? (
+                  // Input normal de mensagem (conversa assumida ou finalizada)
                   <div className="flex items-end gap-2">
                     <input
                       type="file"
@@ -2842,21 +2970,28 @@ export default function AttendantDashboard() {
                     <ImageIcon className="w-5 h-5" />
                   </button>
                   <div className="flex-1 relative">
-                    <textarea
-                      ref={messageInputRef as any}
-                      value={messageText}
-                      onChange={(e) => setMessageText(e.target.value)}
-                      onPaste={handlePasteContent}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' && !e.shiftKey) {
-                          e.preventDefault();
-                          handleSendMessage();
-                        }
-                      }}
-                      placeholder="Digite uma mensagem..."
-                      className="w-full px-4 py-3 pr-12 border rounded-lg focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/30 resize-none min-h-[48px] max-h-[120px] transition-all duration-200 text-white placeholder-slate-400 bg-[#252b3b] border-[#313a4f]"
-                      rows={1}
-                    />
+                    {(() => {
+                      const cDB = contactsDB.find(c => normalizeDbPhone(c.phone_number) === normalizeDbPhone(selectedContactData.phoneNumber));
+                      const isAssumedByOther = !!(cDB?.attendant_id && cDB.attendant_id !== attendant?.user_id);
+                      return (
+                        <textarea
+                          ref={messageInputRef as any}
+                          value={messageText}
+                          onChange={(e) => setMessageText(e.target.value)}
+                          onPaste={handlePasteContent}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' && !e.shiftKey) {
+                              e.preventDefault();
+                              handleSendMessage();
+                            }
+                          }}
+                          placeholder={isAssumedByOther ? 'Conversa sendo atendida por outro atendente...' : 'Digite uma mensagem...'}
+                          disabled={isAssumedByOther}
+                          className={`w-full px-4 py-3 pr-12 border rounded-lg focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/30 resize-none min-h-[48px] max-h-[120px] transition-all duration-200 text-white placeholder-slate-400 bg-[#252b3b] border-[#313a4f]${isAssumedByOther ? ' opacity-50 cursor-not-allowed' : ''}`}
+                          rows={1}
+                        />
+                      );
+                    })()}
                     <div className="absolute right-2 bottom-2">
                       <EmojiPicker
                         onEmojiSelect={(emoji) => {
@@ -2877,7 +3012,7 @@ export default function AttendantDashboard() {
                       )}
                     </button>
                   </div>
-                )}
+                ) : null}
               </div>
             </>
           ) : (
