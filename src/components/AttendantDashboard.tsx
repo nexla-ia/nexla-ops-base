@@ -882,11 +882,6 @@ export default function AttendantDashboard() {
     let filtered = contacts;
 
     // Aplicar filtros
-    if (contactFilter === 'todos') {
-      // Recepção: contatos sem departamento atribuído
-      filtered = filtered.filter(contact => !contact.department_id);
-    }
-
     if (contactFilter === 'departamento' && attendant?.department_id) {
       filtered = filtered.filter(contact =>
         contact.department_id === attendant.department_id
