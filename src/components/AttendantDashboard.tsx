@@ -199,6 +199,28 @@ export default function AttendantDashboard() {
   const [showAddContactModal, setShowAddContactModal] = useState(false);
   const [newContactName, setNewContactName] = useState('');
   const [newContactPhone, setNewContactPhone] = useState('');
+  const [newContactDdi, setNewContactDdi] = useState('55');
+  const [showDdiDropdown, setShowDdiDropdown] = useState(false);
+  const DDI_OPTIONS = [
+    { code: '55',  flag: '🇧🇷', label: 'BR', digits: [10, 11] },
+    { code: '1',   flag: '🇺🇸', label: 'US', digits: [10] },
+    { code: '351', flag: '🇵🇹', label: 'PT', digits: [9] },
+    { code: '54',  flag: '🇦🇷', label: 'AR', digits: [10] },
+    { code: '595', flag: '🇵🇾', label: 'PY', digits: [9] },
+    { code: '598', flag: '🇺🇾', label: 'UY', digits: [8] },
+    { code: '56',  flag: '🇨🇱', label: 'CL', digits: [9] },
+    { code: '57',  flag: '🇨🇴', label: 'CO', digits: [10] },
+    { code: '58',  flag: '🇻🇪', label: 'VE', digits: [10] },
+    { code: '591', flag: '🇧🇴', label: 'BO', digits: [8] },
+    { code: '593', flag: '🇪🇨', label: 'EC', digits: [9] },
+    { code: '51',  flag: '🇵🇪', label: 'PE', digits: [9] },
+    { code: '34',  flag: '🇪🇸', label: 'ES', digits: [9] },
+    { code: '44',  flag: '🇬🇧', label: 'GB', digits: [10] },
+    { code: '49',  flag: '🇩🇪', label: 'DE', digits: [10, 11] },
+    { code: '33',  flag: '🇫🇷', label: 'FR', digits: [9] },
+    { code: '39',  flag: '🇮🇹', label: 'IT', digits: [9, 10] },
+    { code: '52',  flag: '🇲🇽', label: 'MX', digits: [10] },
+  ];
   const [addingContact, setAddingContact] = useState(false);
   const [editingContactId, setEditingContactId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState('');
@@ -1578,32 +1600,83 @@ export default function AttendantDashboard() {
     return () => clearInterval(interval);
   }, [currentView, attendant?.company_id, loadAllContactsFromDB]);
 
+  useEffect(() => {
+    if (showDdiDropdown) {
+      const handleClick = () => setShowDdiDropdown(false);
+      document.addEventListener('click', handleClick);
+      return () => document.removeEventListener('click', handleClick);
+    }
+  }, [showDdiDropdown]);
+
   const addContact = async () => {
     if (!attendant?.company_id) return;
     const name = newContactName.trim();
     let phone = newContactPhone.trim().replace(/\D/g, '');
-    if (!name || phone.length < 10) {
-      setToastMessage('Digite nome e telefone válido (mín. 10 dígitos)');
+
+    if (!name) {
+      setToastMessage('❌ Digite o nome do contato!');
       setShowToast(true);
       return;
     }
-    if (phone.length === 11) phone = phone.substring(0, 2) + phone.substring(3);
+
+    const ddiOption = DDI_OPTIONS.find(d => d.code === newContactDdi);
+    if (!phone || !ddiOption?.digits.includes(phone.length)) {
+      const expected = ddiOption?.digits.join(' ou ') ?? '10';
+      setToastMessage(`❌ Número inválido! Digite ${expected} dígitos para ${ddiOption?.label ?? 'este país'}.`);
+      setShowToast(true);
+      return;
+    }
+
+    const ddi = newContactDdi.replace(/\D/g, '');
+    if (ddi === '55' && phone.length === 11) {
+      phone = phone.substring(0, 2) + phone.substring(3);
+    }
+    if (!phone.startsWith(ddi)) {
+      phone = ddi + phone;
+    }
+
     setAddingContact(true);
     try {
-      await supabase.from('contacts').upsert(
+      const { data: upsertedRows, error: upsertError } = await supabase.from('contacts').upsert(
         { company_id: attendant.company_id, phone_number: phone, name, last_message_time: new Date().toISOString() },
         { onConflict: 'company_id,phone_number', ignoreDuplicates: false }
-      );
+      ).select('id, name, phone_number, last_message_time');
+
+      if (upsertError) throw upsertError;
+
+      const savedContact = upsertedRows?.[0];
+      if (!savedContact) {
+        const { data: fetched } = await supabase
+          .from('contacts')
+          .select('id, name, phone_number, last_message_time')
+          .eq('company_id', attendant.company_id)
+          .eq('phone_number', phone)
+          .single();
+        if (fetched) {
+          setAllContactsList(prev => {
+            const exists = prev.some(c => c.phone_number === phone);
+            if (exists) return prev;
+            return [{ ...fetched, ticket_status: 'aberto' }, ...prev];
+          });
+        }
+      } else {
+        setAllContactsList(prev => {
+          const exists = prev.some(c => c.phone_number === phone);
+          if (exists) return prev;
+          return [{ ...savedContact, ticket_status: 'aberto' }, ...prev];
+        });
+      }
+
       setShowAddContactModal(false);
       setNewContactName('');
       setNewContactPhone('');
-      setToastMessage('Contato adicionado!');
+      setNewContactDdi('55');
+      setToastMessage('✅ Contato adicionado com sucesso!');
       setShowToast(true);
-      loadAllContactsFromDB();
       fetchContacts();
-    } catch (err) {
-      console.error(err);
-      setToastMessage('Erro ao adicionar contato');
+    } catch (err: any) {
+      console.error('Erro ao adicionar contato:', err);
+      setToastMessage(`❌ Erro ao adicionar contato: ${err?.message || 'Tente novamente.'}`);
       setShowToast(true);
     } finally {
       setAddingContact(false);
@@ -1656,23 +1729,51 @@ export default function AttendantDashboard() {
     if (!deleteModal.contact) return;
     setIsDeletingContact(true);
     try {
-      const contactId = deleteModal.contact.id;
+      let contactId = deleteModal.contact.id;
+      const phone_number = deleteModal.contact.phone_number;
+
+      // Se o ID não for UUID válido, busca o real pelo phone
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      if (!uuidRegex.test(contactId)) {
+        const { data: found } = await supabase
+          .from('contacts')
+          .select('id')
+          .eq('phone_number', phone_number)
+          .single();
+        if (!found?.id) throw new Error('Contato não encontrado no banco de dados');
+        contactId = found.id;
+      }
+
       const { data: rpcData, error: rpcError } = await supabase.rpc('delete_contact_and_messages', { p_contact_id: contactId });
       if (rpcError) throw rpcError;
       const result = rpcData as { success: boolean; message?: string } | null;
-      if (result && !result.success) throw new Error(result.message || 'Falha ao apagar');
-      setAllContactsList(prev => prev.filter(c => c.id !== contactId));
-      setContactsDB(prev => prev.filter(c => c.id !== contactId));
-      if (selectedContact && contactsDB.find(c => normalizePhone(c.phone_number) === normalizePhone(selectedContact))?.id === contactId) {
+      if (result && !result.success) throw new Error(result.message || 'Falha ao apagar o contato');
+
+      const deletedPhone = phone_number;
+      const phoneDigits = deletedPhone.replace(/\D/g, '');
+      await supabase.from('messages').delete().or(`numero.eq.${deletedPhone},numero.eq.${phoneDigits},numero.eq.${deletedPhone}@s.whatsapp.net`);
+      await supabase.from('sent_messages').delete().or(`numero.eq.${deletedPhone},numero.eq.${phoneDigits}`);
+
+      setAllContactsList(prev => prev.filter(c => c.phone_number !== deletedPhone && c.id !== contactId));
+      setContactsDB(prev => prev.filter(c => c.phone_number !== deletedPhone && c.id !== contactId));
+
+      if (selectedContact && normalizePhone(deletedPhone) === normalizePhone(selectedContact)) {
         setSelectedContact(null);
+        setMessages([]);
       }
+
       handleCloseDeleteModal();
-      setToastMessage('Contato deletado!');
+      setToastMessage('Contato deletado com sucesso!');
       setShowToast(true);
-      window.dispatchEvent(new CustomEvent('contactDeleted', { detail: contactId }));
+
+      try {
+        window.dispatchEvent(new CustomEvent('contactDeleted', { detail: contactId }));
+      } catch (e) {
+        // ignore
+      }
     } catch (err: any) {
       console.error(err);
-      setToastMessage(`Erro: ${err?.message || 'Erro desconhecido'}`);
+      setToastMessage(`Erro ao deletar contato: ${err?.message || 'Erro desconhecido'}`);
       setShowToast(true);
     } finally {
       setIsDeletingContact(false);
@@ -1875,74 +1976,108 @@ export default function AttendantDashboard() {
 
             {/* ── Modal: Adicionar Contato ─────────────── */}
             {showAddContactModal && (
-              <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setShowAddContactModal(false)}>
-                <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden" onClick={e => e.stopPropagation()}>
-                  <div className="bg-gradient-to-r from-emerald-500 to-green-600 px-6 py-5 text-white">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center">
-                          <Plus className="w-5 h-5" />
-                        </div>
-                        <div>
-                          <h3 className="text-lg font-bold">Novo Contato</h3>
-                          <p className="text-emerald-100 text-xs">Preencha os dados abaixo</p>
-                        </div>
-                      </div>
-                      <button onClick={() => setShowAddContactModal(false)} className="w-8 h-8 flex items-center justify-center rounded-full bg-white/10 hover:bg-white/20 text-white transition-all">
-                        <X className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </div>
-                  <div className="p-6 space-y-4">
+              <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setShowAddContactModal(false)}>
+                <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md flex flex-col" onClick={(e) => e.stopPropagation()}>
+                  <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
                     <div>
-                      <label className="block text-sm font-semibold text-slate-700 mb-1.5">
-                        Nome completo <span className="text-red-500">*</span>
-                      </label>
+                      <h3 className="text-lg font-bold text-slate-900">Adicionar Contato</h3>
+                      <p className="text-xs text-slate-500 mt-0.5">Digite o nome e telefone do contato</p>
+                    </div>
+                    <button onClick={() => setShowAddContactModal(false)} className="w-8 h-8 flex items-center justify-center rounded-full text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-all">
+                      <X className="w-5 h-5" />
+                    </button>
+                  </div>
+
+                  <div className="p-5 space-y-4">
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-2">Nome do Contato *</label>
                       <input
                         type="text"
                         value={newContactName}
-                        onChange={e => setNewContactName(e.target.value)}
+                        onChange={(e) => setNewContactName(e.target.value)}
                         placeholder="Ex: João Silva"
-                        className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100 transition-all bg-slate-50 focus:bg-white"
+                        className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:border-green-400 focus:ring-2 focus:ring-green-100 transition-all"
                         disabled={addingContact}
                         autoFocus
-                        onKeyDown={e => e.key === 'Enter' && addContact()}
                       />
                     </div>
+
                     <div>
-                      <label className="block text-sm font-semibold text-slate-700 mb-1.5">
-                        WhatsApp <span className="text-red-500">*</span>
-                      </label>
-                      <div className="relative">
-                        <Phone className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                        <input
-                          type="text"
-                          inputMode="numeric"
-                          value={newContactPhone}
-                          onChange={e => setNewContactPhone(e.target.value.replace(/\D/g, ''))}
-                          placeholder="DDD + número (ex: 69991234567)"
-                          className="w-full pl-10 pr-4 py-3 border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100 transition-all bg-slate-50 focus:bg-white font-mono"
-                          disabled={addingContact}
-                          onKeyDown={e => e.key === 'Enter' && addContact()}
-                        />
-                      </div>
-                      <p className="text-[11px] text-slate-400 mt-1.5">Apenas números — DDI + DDD + número</p>
+                      <label className="block text-sm font-medium text-slate-700 mb-2">Número do Telefone *</label>
+                      {(() => {
+                        const selectedDdi = DDI_OPTIONS.find(d => d.code === newContactDdi)!;
+                        const digits = newContactPhone.length;
+                        const valid = selectedDdi.digits.includes(digits);
+                        const hasInput = digits > 0;
+                        const max = Math.max(...selectedDdi.digits);
+                        const borderClass = hasInput ? (valid ? 'border-green-400 ring-2 ring-green-100' : 'border-red-400 ring-2 ring-red-100') : 'border-slate-200';
+                        return (
+                          <div className="flex gap-2 items-stretch">
+                            <div className="relative">
+                              <button
+                                type="button"
+                                onClick={() => setShowDdiDropdown(prev => !prev)}
+                                disabled={addingContact}
+                                className="h-full flex items-center gap-1.5 px-3 py-2 border border-slate-200 rounded-lg bg-white hover:bg-slate-50 transition-all text-sm whitespace-nowrap font-medium text-slate-700"
+                              >
+                                <span className="font-mono">+{newContactDdi}</span>
+                                <svg className="w-3 h-3 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+                              </button>
+                              {showDdiDropdown && (
+                                <div className="absolute top-full left-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-xl z-50 max-h-60 overflow-y-auto min-w-[140px]">
+                                  {DDI_OPTIONS.map(opt => (
+                                    <button
+                                      key={opt.code}
+                                      type="button"
+                                      onClick={() => { setNewContactDdi(opt.code); setNewContactPhone(''); setShowDdiDropdown(false); }}
+                                      className={`flex items-center justify-between w-full px-3 py-2 text-sm transition-colors first:rounded-t-xl last:rounded-b-xl ${newContactDdi === opt.code ? 'bg-green-50 text-green-700 font-semibold' : 'text-slate-700 hover:bg-slate-50'}`}
+                                    >
+                                      <span className="font-medium">{opt.label}</span>
+                                      <span className="font-mono text-slate-400 text-xs">+{opt.code}</span>
+                                    </button>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                            <div className="flex-1 relative">
+                              <input
+                                type="text"
+                                inputMode="numeric"
+                                value={newContactPhone}
+                                onChange={(e) => {
+                                  const value = e.target.value.replace(/\D/g, '').slice(0, max);
+                                  setNewContactPhone(value);
+                                }}
+                                placeholder={`${selectedDdi.digits.join(' ou ')} dígitos`}
+                                className={`w-full px-3 py-2 border rounded-lg focus:outline-none transition-all font-mono ${borderClass}`}
+                                disabled={addingContact}
+                              />
+                              {hasInput && (
+                                <span className={`absolute right-3 top-1/2 -translate-y-1/2 text-xs font-mono ${valid ? 'text-green-500' : 'text-red-400'}`}>
+                                  {digits}/{max}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })()}
                     </div>
+
                     <div className="flex gap-3 pt-2">
                       <button
                         onClick={() => setShowAddContactModal(false)}
-                        className="flex-1 px-4 py-2.5 text-slate-600 border border-slate-200 rounded-xl hover:bg-slate-50 transition-all text-sm font-medium"
+                        className="flex-1 px-4 py-2 text-slate-600 border border-slate-200 rounded-lg hover:bg-slate-50 transition-all"
                         disabled={addingContact}
                       >
                         Cancelar
                       </button>
                       <button
                         onClick={addContact}
-                        disabled={addingContact || !newContactName.trim() || newContactPhone.trim().length < 10}
-                        className="flex-1 px-4 py-2.5 bg-gradient-to-r from-emerald-500 to-green-600 hover:from-emerald-600 hover:to-green-700 text-white rounded-xl transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2 text-sm font-semibold shadow-sm"
+                        disabled={addingContact || !newContactName.trim() || !newContactPhone.trim()}
+                        className="flex-1 px-4 py-2 bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                       >
                         {addingContact ? (
-                          <><Loader2 className="w-4 h-4 animate-spin" />Salvando...</>
+                          <><Loader2 className="w-4 h-4 animate-spin" />Adicionando...</>
                         ) : (
                           <><Plus className="w-4 h-4" />Adicionar</>
                         )}
@@ -2015,7 +2150,7 @@ export default function AttendantDashboard() {
               onClose={handleCloseDeleteModal}
               onConfirm={handleDeleteContact}
               title="Excluir Contato"
-              message={`Tem certeza que deseja excluir "${deleteModal.contact?.name}"?\n\nTodas as mensagens serão removidas permanentemente. Esta ação não pode ser desfeita.`}
+              message={`Tem certeza que deseja excluir o contato "${deleteModal.contact?.name}"?\n\nTodas as mensagens e dados serão removidos permanentemente. Esta ação não pode ser desfeita.`}
               confirmText="Excluir"
               cancelText="Cancelar"
               confirmColor="red"
