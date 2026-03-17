@@ -124,7 +124,7 @@ export default function AttendantDashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedContact, setSelectedContact] = useState<string | null>(null);
-  const [contactFilter, setContactFilter] = useState<'todos' | 'departamento' | 'abertos'>('todos');
+  const [contactFilter, setContactFilter] = useState<'todos' | 'departamento' | 'abertos'>('abertos');
   const [hasMoreMessages, setHasMoreMessages] = useState(true);
   const [loadingMoreMessages, setLoadingMoreMessages] = useState(false);
 
@@ -1861,12 +1861,15 @@ export default function AttendantDashboard() {
                             const dbContact = contactsDB.find(x => x.id === contact.id);
                             const deptName = departments.find(d => d.id === dbContact?.department_id)?.name;
 
+                            const hasHistory = !!contact.last_message;
+
                             return (
                               <div
                                 key={contact.id}
-                                className="group relative bg-white border border-slate-200/80 rounded-2xl p-5 hover:shadow-lg hover:border-blue-200 transition-all duration-200 hover:-translate-y-0.5 cursor-pointer overflow-hidden"
+                                className={`group relative bg-white border border-slate-200/80 rounded-2xl p-5 hover:shadow-lg hover:border-blue-200 transition-all duration-200 hover:-translate-y-0.5 overflow-hidden ${hasHistory ? 'cursor-pointer' : 'cursor-default'}`}
                                 style={{ animationDelay: `${idx * 30}ms` }}
                                 onClick={() => {
+                                  if (!hasHistory) return;
                                   setCurrentView('mensagens');
                                   setSelectedContact(normalizePhone(contact.phone_number));
                                 }}
@@ -1921,7 +1924,7 @@ export default function AttendantDashboard() {
                                 </div>
 
                                 {/* Last message */}
-                                {contact.last_message && (
+                                {hasHistory && contact.last_message && (
                                   <p className="text-[11px] text-slate-400 truncate mt-2 leading-relaxed">
                                     {contact.last_message}
                                   </p>
@@ -1929,19 +1932,34 @@ export default function AttendantDashboard() {
 
                                 {/* Footer divider */}
                                 <div className="mt-3 pt-3 border-t border-slate-100 flex items-center justify-between gap-2">
-                                  <span className="text-[11px] text-slate-400 truncate">
-                                    {lastMsgTime || 'Sem mensagens'}
-                                  </span>
-                                  {isTicketOpen ? (
-                                    <span className="flex-shrink-0 inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-500 text-white shadow-sm shadow-emerald-100">
-                                      <span className="w-1.5 h-1.5 rounded-full bg-white/80 animate-pulse" />
-                                      Aberto
-                                    </span>
+                                  {hasHistory ? (
+                                    <>
+                                      <span className="text-[11px] text-slate-400 truncate">
+                                        {lastMsgTime || 'Sem mensagens'}
+                                      </span>
+                                      {isTicketOpen ? (
+                                        <span className="flex-shrink-0 inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-500 text-white shadow-sm shadow-emerald-100">
+                                          <span className="w-1.5 h-1.5 rounded-full bg-white/80 animate-pulse" />
+                                          Aberto
+                                        </span>
+                                      ) : (
+                                        <span className="flex-shrink-0 inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-slate-100 text-slate-500">
+                                          <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
+                                          Fechado
+                                        </span>
+                                      )}
+                                    </>
                                   ) : (
-                                    <span className="flex-shrink-0 inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-slate-100 text-slate-500">
-                                      <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
-                                      Fechado
-                                    </span>
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setCurrentView('mensagens');
+                                        setSelectedContact(normalizePhone(contact.phone_number));
+                                      }}
+                                      className="w-full py-1.5 rounded-lg bg-teal-500 hover:bg-teal-600 text-white text-[11px] font-semibold transition-colors"
+                                    >
+                                      Iniciar Conversa
+                                    </button>
                                   )}
                                 </div>
                               </div>
@@ -2250,13 +2268,14 @@ export default function AttendantDashboard() {
               </button>
               <button
                 onClick={() => setContactFilter('departamento')}
-                className={`flex-1 py-1.5 rounded-md text-xs font-semibold transition-all ${
+                className={`flex-1 py-1.5 rounded-md text-xs font-semibold transition-all truncate ${
                   contactFilter === 'departamento'
                     ? 'bg-[#313a4f] text-white shadow-sm'
                     : 'text-slate-400 hover:text-slate-200'
                 }`}
+                title={departments.find(d => d.id === attendant?.department_id)?.name || 'Meu departamento'}
               >
-                Depto.
+                {departments.find(d => d.id === attendant?.department_id)?.name || 'Depto.'}
               </button>
             </div>
           </div>
@@ -2746,7 +2765,7 @@ export default function AttendantDashboard() {
 
               {/* Message Input ou Botão Assumir Conversa */}
               <div className="border-t p-4" style={{ backgroundColor: "#1a1f2e", borderColor: "#252b3b" }}>
-                {contactFilter === 'todos' && !isContactFromMyDepartment ? (
+                {selectedContactData && !isContactFromMyDepartment ? (
                   // Mostrar botão para assumir conversa
                   <div className="flex flex-col items-center gap-3 py-4">
                     <div className="text-center">
