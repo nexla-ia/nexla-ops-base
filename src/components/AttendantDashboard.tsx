@@ -1719,12 +1719,8 @@ export default function AttendantDashboard() {
         {currentView === 'historico' ? (
           <TicketHistory onOpenChat={handleOpenChatFromHistory} />
         ) : currentView === 'contatos' ? (
-          <div className="flex-1 bg-gradient-to-br from-slate-50 via-blue-50/30 to-slate-50 dark:from-[#0d1117] dark:via-[#0d1117] dark:to-[#0b0f14] overflow-y-auto">
+          <div className="flex-1 bg-slate-50 overflow-y-auto">
             {(() => {
-
-              const totalContatos = allContactsList.length;
-              const abertos = allContactsList.filter(c => c.ticket_status !== 'finalizado').length;
-              const fechados = totalContatos - abertos;
 
               const filtered = allContactsSearch.trim()
                 ? allContactsList.filter(c =>
@@ -1734,208 +1730,105 @@ export default function AttendantDashboard() {
                 : allContactsList;
 
               return (
-                <div className="w-full p-6 space-y-6">
-
-                  {/* ── Header ─────────────────────────────── */}
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h2 className="text-2xl font-bold text-slate-900 tracking-tight">Contatos</h2>
-                      <p className="text-sm text-slate-400 mt-0.5">
-                        {loadingAllContacts ? 'Carregando...' : `${totalContatos} contato${totalContatos !== 1 ? 's' : ''} cadastrado${totalContatos !== 1 ? 's' : ''}`}
-                      </p>
-                    </div>
+                <div className="w-full p-6">
+                  <div className="mb-6 flex items-center justify-between">
+                    <h2 className="text-3xl font-bold text-slate-900">Contatos</h2>
                     <button
                       onClick={() => setShowAddContactModal(true)}
-                      className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-emerald-500 to-green-600 hover:from-emerald-600 hover:to-green-700 text-white rounded-xl font-semibold text-sm transition-all shadow-lg shadow-emerald-200 hover:shadow-xl hover:-translate-y-0.5 active:translate-y-0"
+                      className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white rounded-lg font-semibold transition-all shadow-md hover:shadow-lg"
                     >
-                      <Plus className="w-4 h-4" />
-                      Novo Contato
+                      <Plus className="w-5 h-5" />
+                      Adicionar
                     </button>
                   </div>
 
-                  {/* ── Stat Cards ─────────────────────────── */}
-                  {!loadingAllContacts && totalContatos > 0 && (
-                    <div className="grid grid-cols-3 gap-4">
-                      <div className="bg-white rounded-2xl p-4 border border-slate-200 shadow-sm">
-                        <div className="flex items-center justify-between mb-3">
-                          <div className="w-9 h-9 bg-blue-50 rounded-xl flex items-center justify-center">
-                            <Users className="w-4.5 h-4.5 text-blue-600" style={{ width: '18px', height: '18px' }} />
-                          </div>
-                          <span className="text-[11px] font-semibold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full">Total</span>
-                        </div>
-                        <p className="text-2xl font-bold text-slate-900">{totalContatos}</p>
-                        <p className="text-xs text-slate-500 mt-0.5">Todos os contatos</p>
-                      </div>
-                      <div className="bg-white rounded-2xl p-4 border border-slate-200 shadow-sm">
-                        <div className="flex items-center justify-between mb-3">
-                          <div className="w-9 h-9 bg-emerald-50 rounded-xl flex items-center justify-center">
-                            <CheckCircle2 className="w-4.5 h-4.5 text-emerald-600" style={{ width: '18px', height: '18px' }} />
-                          </div>
-                          <span className="text-[11px] font-semibold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">Abertos</span>
-                        </div>
-                        <p className="text-2xl font-bold text-slate-900">{abertos}</p>
-                        <p className="text-xs text-slate-500 mt-0.5">Chamados ativos</p>
-                      </div>
-                      <div className="bg-white rounded-2xl p-4 border border-slate-200 shadow-sm">
-                        <div className="flex items-center justify-between mb-3">
-                          <div className="w-9 h-9 bg-slate-100 rounded-xl flex items-center justify-center">
-                            <FolderOpen className="w-4.5 h-4.5 text-slate-500" style={{ width: '18px', height: '18px' }} />
-                          </div>
-                          <span className="text-[11px] font-semibold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full">Fechados</span>
-                        </div>
-                        <p className="text-2xl font-bold text-slate-900">{fechados}</p>
-                        <p className="text-xs text-slate-500 mt-0.5">Finalizados</p>
-                      </div>
-                    </div>
-                  )}
+                  <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
 
-                  {/* ── Search & List ──────────────────────── */}
-                  <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-
-                    {/* Search bar */}
-                    <div className="px-5 py-4 border-b border-slate-100 flex items-center gap-3">
-                      <div className="relative flex-1">
-                        <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                    <div className="px-6 py-4 border-b border-slate-100">
+                      <div className="relative">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                         <input
                           type="text"
                           value={allContactsSearch}
                           onChange={(e) => setAllContactsSearch(e.target.value)}
                           placeholder="Buscar por nome ou telefone..."
-                          className="w-full pl-10 pr-10 py-2.5 text-sm border border-slate-200 rounded-xl bg-slate-50 text-slate-900 placeholder-slate-400 focus:outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 focus:bg-white transition-all"
+                          className="w-full pl-10 pr-4 py-2.5 border border-slate-200 rounded-lg bg-white text-gray-900 focus:outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 transition-all"
                         />
-                        {allContactsSearch && (
-                          <button
-                            onClick={() => setAllContactsSearch('')}
-                            className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 flex items-center justify-center rounded-full bg-slate-300 hover:bg-slate-400 text-white transition-all"
-                          >
-                            <X className="w-3 h-3" />
-                          </button>
-                        )}
                       </div>
-                      {!loadingAllContacts && allContactsSearch && (
-                        <span className="text-xs text-slate-500 whitespace-nowrap flex-shrink-0">
-                          {filtered.length} resultado{filtered.length !== 1 ? 's' : ''}
-                        </span>
-                      )}
                     </div>
 
-                    {/* Content */}
-                    <div className="p-5">
+                    <div className="p-6">
                       {loadingAllContacts ? (
-                        <div className="flex flex-col items-center justify-center py-16 gap-3">
-                          <div className="relative">
-                            <div className="w-12 h-12 rounded-full border-4 border-slate-200 border-t-blue-500 animate-spin" />
-                          </div>
-                          <p className="text-sm font-medium text-slate-500">Carregando contatos...</p>
+                        <div className="flex flex-col items-center justify-center py-12 text-slate-400">
+                          <Loader2 className="w-8 h-8 animate-spin mb-3 text-blue-500" />
+                          <p className="text-sm font-medium">Carregando contatos...</p>
                         </div>
                       ) : filtered.length === 0 ? (
-                        <div className="flex flex-col items-center justify-center py-16 text-center">
-                          <div className="w-20 h-20 bg-gradient-to-br from-slate-100 to-slate-200 rounded-3xl flex items-center justify-center mb-4 shadow-inner">
-                            <Users className="w-9 h-9 text-slate-400" />
-                          </div>
-                          <p className="font-semibold text-slate-600 text-base">
-                            {allContactsSearch ? 'Nenhum resultado' : 'Sem contatos ainda'}
-                          </p>
-                          <p className="text-sm text-slate-400 mt-1 max-w-xs">
-                            {allContactsSearch
-                              ? `Nenhum contato corresponde a "${allContactsSearch}"`
-                              : 'Adicione o primeiro contato clicando em "Novo Contato"'}
-                          </p>
-                          {allContactsSearch && (
-                            <button
-                              onClick={() => setAllContactsSearch('')}
-                              className="mt-4 text-sm text-blue-600 hover:text-blue-700 font-medium"
-                            >
-                              Limpar busca
-                            </button>
-                          )}
+                        <div className="flex flex-col items-center justify-center py-12 text-slate-400">
+                          <User className="w-10 h-10 mb-3 opacity-40" />
+                          <p className="text-sm font-medium">Nenhum contato encontrado</p>
+                          <p className="text-xs mt-1">Procure por contatos ou adicione um novo</p>
                         </div>
                       ) : (
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                          {filtered.map((contact, idx) => {
+                          {filtered.map((contact) => {
                             const initial = (contact.name || contact.phone_number || '?')[0].toUpperCase();
                             const color = getAvatarColor(contact.name || contact.phone_number || '');
-                            const lastMsgTime = contact.last_message_time ? formatDate(contact.last_message_time) : null;
+                            const hasHistory = !!contact.last_message;
+                            const lastMessageTime = contact.last_message_time && hasHistory ? formatDate(contact.last_message_time) : null;
                             const isTicketOpen = contact.ticket_status !== 'finalizado';
                             const cleanPhone = (contact.phone_number || '').replace('@s.whatsapp.net', '').replace('@g.us', '');
-                            const dbContact = contactsDB.find(x => x.id === contact.id);
-                            const deptName = departments.find(d => d.id === dbContact?.department_id)?.name;
-
-                            const hasHistory = !!contact.last_message;
 
                             return (
                               <div
                                 key={contact.id}
-                                className={`group relative bg-white border border-slate-200/80 rounded-2xl p-5 hover:shadow-lg hover:border-blue-200 transition-all duration-200 hover:-translate-y-0.5 overflow-hidden ${hasHistory ? 'cursor-pointer' : 'cursor-default'}`}
-                                style={{ animationDelay: `${idx * 30}ms` }}
+                                className={`bg-white/70 border border-gray-200/50 rounded-2xl p-6 shadow-md hover:shadow-lg transition-all group hover:-translate-y-1 ${hasHistory ? 'cursor-pointer' : 'cursor-default'}`}
                                 onClick={() => {
                                   if (!hasHistory) return;
                                   setCurrentView('mensagens');
                                   setSelectedContact(normalizePhone(contact.phone_number));
                                 }}
                               >
-                                {/* Hover gradient top bar */}
-                                <div className="absolute inset-x-0 top-0 h-0.5 bg-gradient-to-r from-blue-400 via-sky-400 to-blue-500 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-
-                                {/* Top row: avatar + actions */}
-                                <div className="flex items-start justify-between mb-4">
-                                  <div className={`w-12 h-12 bg-gradient-to-br ${color} rounded-xl flex items-center justify-center text-white font-bold text-lg shadow-sm flex-shrink-0`}>
+                                {/* Avatar + Actions */}
+                                <div className="flex justify-between mb-3">
+                                  <div className={`w-14 h-14 bg-gradient-to-br ${color} rounded-xl flex items-center justify-center shadow-md text-white font-semibold text-lg`}>
                                     {initial}
                                   </div>
-
-                                  {/* Action buttons — appear on hover */}
-                                  <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-all duration-200 -translate-y-1 group-hover:translate-y-0">
+                                  <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                                     <button
                                       onClick={(e) => { e.stopPropagation(); handleEditContact(contact); }}
-                                      className="w-8 h-8 flex items-center justify-center rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-all"
+                                      className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
                                       title="Editar contato"
                                     >
-                                      <Edit2 className="w-3.5 h-3.5" />
+                                      <Edit2 className="w-4 h-4" />
                                     </button>
                                     <button
                                       onClick={(e) => { e.stopPropagation(); handleOpenDeleteModal(contact); }}
-                                      className="w-8 h-8 flex items-center justify-center rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 transition-all"
-                                      title="Excluir contato"
+                                      className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
+                                      title="Deletar contato"
                                     >
-                                      <Trash2 className="w-3.5 h-3.5" />
+                                      <Trash2 className="w-4 h-4" />
                                     </button>
                                   </div>
                                 </div>
 
-                                {/* Name */}
-                                <h3 className="font-bold text-slate-900 text-sm leading-snug mb-1 truncate pr-2">
-                                  {contact.name || <span className="text-slate-400 italic font-normal text-sm">Sem nome</span>}
-                                </h3>
+                                {/* Nome */}
+                                <h3 className="font-bold text-gray-900">{contact.name || 'Sem nome'}</h3>
 
-                                {/* Phone */}
-                                <div className="flex items-center gap-1.5 mb-3">
-                                  <Phone className="w-3 h-3 text-slate-400 flex-shrink-0" />
-                                  <span className="text-xs text-slate-500 font-mono truncate">{cleanPhone || '—'}</span>
-                                </div>
+                                {/* Número */}
+                                <p className="text-sm text-gray-600 mt-1">{cleanPhone || 'Sem número'}</p>
 
-                                {/* Tags row */}
-                                <div className="flex flex-wrap gap-1.5 mb-1 min-h-[22px]">
-                                  {deptName && (
-                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-indigo-50 text-indigo-700 text-[10px] font-semibold rounded-full border border-indigo-100">
-                                      <Building2 className="w-2.5 h-2.5" />
-                                      {deptName}
-                                    </span>
-                                  )}
-                                </div>
-
-                                {/* Last message */}
+                                {/* Última Mensagem */}
                                 {hasHistory && contact.last_message && (
-                                  <p className="text-[11px] text-slate-400 truncate mt-2 leading-relaxed">
-                                    {contact.last_message}
-                                  </p>
+                                  <p className="text-xs text-gray-600 mt-2 line-clamp-2">{contact.last_message}</p>
                                 )}
 
-                                {/* Footer divider */}
-                                <div className="mt-3 pt-3 border-t border-slate-100 flex items-center justify-between gap-2">
+                                {/* Data + Status */}
+                                <div className="mt-4 pt-3 border-t border-gray-100 flex items-center justify-between text-xs">
                                   {hasHistory ? (
                                     <>
                                       <span className="text-[11px] text-slate-400 truncate">
-                                        {lastMsgTime || 'Sem mensagens'}
+                                        {lastMessageTime}
                                       </span>
                                       {isTicketOpen ? (
                                         <span className="flex-shrink-0 inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-500 text-white shadow-sm shadow-emerald-100">
@@ -1969,15 +1862,13 @@ export default function AttendantDashboard() {
                       )}
                     </div>
 
-                    {/* Footer count */}
-                    {!loadingAllContacts && filtered.length > 0 && (
-                      <div className="px-5 py-3 bg-slate-50 border-t border-slate-100 text-center">
-                        <p className="text-xs text-slate-400">
-                          Exibindo {filtered.length} de {totalContatos} contato{totalContatos !== 1 ? 's' : ''}
-                        </p>
-                      </div>
-                    )}
                   </div>
+
+                  {!loadingAllContacts && allContactsList.length > 0 && (
+                    <p className="text-center text-sm text-slate-500 mt-4">
+                      Total de {allContactsList.length} contato{allContactsList.length !== 1 ? 's' : ''}
+                    </p>
+                  )}
                 </div>
               );
             })()}
