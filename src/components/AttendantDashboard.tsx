@@ -882,6 +882,16 @@ export default function AttendantDashboard() {
     let filtered = contacts;
 
     // Aplicar filtros
+    if (contactFilter === 'todos') {
+      // Recepção: só contatos do departamento chamado "Recepção"
+      const recepcaoDept = departments.find(d => d.name.toLowerCase().includes('recep'));
+      if (recepcaoDept) {
+        filtered = filtered.filter(contact => contact.department_id === recepcaoDept.id);
+      } else {
+        filtered = filtered.filter(contact => !contact.department_id);
+      }
+    }
+
     if (contactFilter === 'departamento' && attendant?.department_id) {
       filtered = filtered.filter(contact =>
         contact.department_id === attendant.department_id
