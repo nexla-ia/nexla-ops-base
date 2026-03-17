@@ -2433,7 +2433,7 @@ export default function AttendantDashboard() {
                       {selectedContactData.department_id && selectedContactData.department_id !== attendant?.department_id && (
                         <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-amber-100 text-amber-700 text-xs rounded-full border border-amber-200">
                           <Building2 className="w-3 h-3" />
-                          Outro departamento
+                          {departments.find(d => d.id === selectedContactData.department_id)?.name || 'Outro departamento'}
                         </span>
                       )}
                       {/* Tags do contato no cabeçalho */}
