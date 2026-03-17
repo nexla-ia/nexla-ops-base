@@ -148,7 +148,7 @@ export default function CompanyDashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedContact, setSelectedContact] = useState<string | null>(null);
-  const [contactFilter, setContactFilter] = useState<'todos' | 'departamento' | 'abertos'>('todos');
+  const [contactFilter, setContactFilter] = useState<'todos' | 'departamento' | 'abertos'>('abertos');
   const [hasMoreMessages, setHasMoreMessages] = useState(true);
   const [loadingMoreMessages, setLoadingMoreMessages] = useState(false);
 
@@ -320,7 +320,7 @@ export default function CompanyDashboard() {
   ];
   const [addingContact, setAddingContact] = useState(false);
   const [showAllContactsModal, setShowAllContactsModal] = useState(false);
-  const [allContactsList, setAllContactsList] = useState<{ id: string; name: string; phone_number: string; last_message_time?: string; ticket_status?: string }[]>([]);
+  const [allContactsList, setAllContactsList] = useState<{ id: string; name: string; phone_number: string; last_message_time?: string; last_message?: string | null; ticket_status?: string }[]>([]);
   const [loadingAllContacts, setLoadingAllContacts] = useState(false);
   const [allContactsSearch, setAllContactsSearch] = useState('');
   const [pendingNewContact, setPendingNewContact] = useState<{ name: string; phone: string } | null>(null);
@@ -1764,6 +1764,7 @@ export default function CompanyDashboard() {
     setWebhookContactsSearch('');
     setPendingNewContact({ name: wc.name, phone: wc.phone });
     setSelectedContact(wc.phone);
+    setActiveTab('mensagens');
     if (window.innerWidth < 768) setSidebarOpen(false);
     fetchContacts();
   };
@@ -1839,10 +1840,6 @@ export default function CompanyDashboard() {
       setNewContactName('');
       setNewContactPhone('');
       setNewContactDdi('55');
-      setPendingNewContact({ name, phone });
-      setSelectedContact(phone);
-      setActiveTab('contatos');
-      if (window.innerWidth < 768) setSidebarOpen(false);
       fetchContacts();
       alert('✅ Contato adicionado com sucesso!');
     } catch (err) {
@@ -1862,7 +1859,7 @@ export default function CompanyDashboard() {
     try {
       const { data: contactsData, error } = await supabase
         .from('contacts')
-        .select('id, name, phone_number, last_message_time, ticket_status')
+        .select('id, name, phone_number, last_message_time, last_message, ticket_status')
         .eq('company_id', company.id)
         .order('last_message_time', { ascending: false });
 
@@ -3975,20 +3972,22 @@ export default function CompanyDashboard() {
                               {filtered.map((contact) => {
                                 const initial = (contact.name || contact.phone_number || '?')[0].toUpperCase();
                                 const color = getAvatarColor(contact.name || contact.phone_number || '');
-                                const lastMessageTime = contact.last_message_time ? formatDate(contact.last_message_time) : 'Sem mensagens';
+                                const hasHistory = !!contact.last_message;
+                                const lastMessageTime = contact.last_message_time && hasHistory ? formatDate(contact.last_message_time) : null;
                                 const isTicketOpen = contact.ticket_status !== 'finalizado';
                                 const cleanPhone = (contact.phone_number || '').replace('@s.whatsapp.net', '').replace('@g.us', '');
 
                                 return (
                                   <div
                                     key={contact.id}
-                                    className="bg-white/70 dark:bg-slate-900 backdrop-blur-xl border border-gray-200/50 dark:border-slate-600 rounded-2xl p-6 shadow-md hover:shadow-lg transition-all group hover:-translate-y-1 cursor-pointer"
+                                    className={`bg-white/70 dark:bg-slate-900 backdrop-blur-xl border border-gray-200/50 dark:border-slate-600 rounded-2xl p-6 shadow-md hover:shadow-lg transition-all group hover:-translate-y-1 ${hasHistory ? 'cursor-pointer' : 'cursor-default'}`}
                                     onClick={() => {
+                                      if (!hasHistory) return;
                                       const normalizedPhone = normalizePhone(contact.phone_number);
                                       setSelectedContact(normalizedPhone);
-                                      setPendingNewContact({ 
-                                        name: contact.name || '', 
-                                        phone: normalizedPhone 
+                                      setPendingNewContact({
+                                        name: contact.name || '',
+                                        phone: normalizedPhone
                                       });
                                       setActiveTab('mensagens');
                                       if (window.innerWidth < 768) setSidebarOpen(false);
@@ -4037,7 +4036,7 @@ export default function CompanyDashboard() {
                                     </p>
 
                                     {/* Última Mensagem (opcional) */}
-                                    {contact.last_message && (
+                                    {hasHistory && contact.last_message && (
                                       <p className="text-xs text-gray-600 dark:text-slate-400 mt-2 line-clamp-2">
                                         {contact.last_message}
                                       </p>
@@ -4045,19 +4044,33 @@ export default function CompanyDashboard() {
 
                                     {/* Data + Status */}
                                     <div className="mt-4 pt-3 border-t border-gray-100 dark:border-slate-700 flex items-center justify-between text-xs">
-                                      <p className="text-gray-400 dark:text-slate-500">
-                                        {lastMessageTime}
-                                      </p>
-                                      {isTicketOpen ? (
-                                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-emerald-500 text-white">
-                                          <span className="w-1.5 h-1.5 rounded-full bg-white/80" />
-                                          Aberto
-                                        </span>
+                                      {hasHistory ? (
+                                        <>
+                                          <p className="text-gray-400 dark:text-slate-500">
+                                            {lastMessageTime}
+                                          </p>
+                                          {isTicketOpen ? (
+                                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-emerald-500 text-white">
+                                              <span className="w-1.5 h-1.5 rounded-full bg-white/80" />
+                                              Aberto
+                                            </span>
+                                          ) : (
+                                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-slate-200 dark:bg-slate-600 text-slate-600 dark:text-slate-200">
+                                              <span className="w-1.5 h-1.5 rounded-full bg-slate-400 dark:bg-slate-400" />
+                                              Fechado
+                                            </span>
+                                          )}
+                                        </>
                                       ) : (
-                                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-slate-200 dark:bg-slate-600 text-slate-600 dark:text-slate-200">
-                                          <span className="w-1.5 h-1.5 rounded-full bg-slate-400 dark:bg-slate-400" />
-                                          Fechado
-                                        </span>
+                                        <button
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            startConversationFromContact({ name: contact.name || '', phone: normalizePhone(contact.phone_number) });
+                                          }}
+                                          className="w-full py-1.5 rounded-lg bg-teal-500 hover:bg-teal-600 text-white text-[11px] font-semibold transition-colors"
+                                        >
+                                          Iniciar Conversa
+                                        </button>
                                       )}
                                     </div>
                                   </div>
