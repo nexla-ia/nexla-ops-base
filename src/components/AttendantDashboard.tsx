@@ -2167,74 +2167,6 @@ export default function AttendantDashboard() {
               </div>
             )}
 
-            {/* ── Modal: Editar Contato ────────────────── */}
-            {isEditModalOpen && (
-              <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-                <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
-                  <div className="bg-gradient-to-r from-blue-500 to-blue-600 px-6 py-5 text-white">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center">
-                          <Edit2 className="w-5 h-5" />
-                        </div>
-                        <div>
-                          <h3 className="text-lg font-bold">Editar Contato</h3>
-                          <p className="text-blue-100 text-xs">Atualize nome ou número</p>
-                        </div>
-                      </div>
-                      <button onClick={handleCloseEditModal} className="w-8 h-8 flex items-center justify-center rounded-full bg-white/10 hover:bg-white/20 text-white transition-all">
-                        <X className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </div>
-                  <div className="p-6 space-y-4">
-                    <div>
-                      <label className="block text-sm font-semibold text-slate-700 mb-1.5">Nome</label>
-                      <input
-                        type="text"
-                        value={editingName}
-                        onChange={e => setEditingName(e.target.value)}
-                        placeholder="Nome do contato"
-                        className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 transition-all bg-slate-50 focus:bg-white"
-                        autoFocus
-                        onKeyDown={e => e.key === 'Enter' && handleSaveContactEdit()}
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-semibold text-slate-700 mb-1.5">Número</label>
-                      <div className="relative">
-                        <Phone className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                        <input
-                          type="text"
-                          value={editingPhone}
-                          onChange={e => setEditingPhone(e.target.value)}
-                          placeholder="Número do contato"
-                          className="w-full pl-10 pr-4 py-3 border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 transition-all bg-slate-50 focus:bg-white font-mono"
-                          onKeyDown={e => e.key === 'Enter' && handleSaveContactEdit()}
-                        />
-                      </div>
-                    </div>
-                    <div className="flex gap-3 pt-2">
-                      <button onClick={handleCloseEditModal} className="flex-1 px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl transition-all text-sm font-semibold">Cancelar</button>
-                      <button onClick={handleSaveContactEdit} className="flex-1 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl transition-all text-sm font-semibold shadow-sm">Salvar alterações</button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* ── Modal: Excluir Contato ───────────────── */}
-            <Modal
-              isOpen={deleteModal.isOpen}
-              onClose={handleCloseDeleteModal}
-              onConfirm={handleDeleteContact}
-              title="Excluir Contato"
-              message={`Tem certeza que deseja excluir o contato "${deleteModal.contact?.name}"?\n\nTodas as mensagens e dados serão removidos permanentemente. Esta ação não pode ser desfeita.`}
-              confirmText="Excluir"
-              cancelText="Cancelar"
-              confirmColor="red"
-              loading={isDeletingContact}
-            />
           </div>
         ) : currentView === 'transferencias' ? (
           <div className="flex-1 bg-gradient-to-br from-slate-50 via-blue-50/30 to-slate-50 dark:from-[#0d1117] dark:via-[#0d1117] dark:to-[#0b0f14] overflow-y-auto">
@@ -3247,6 +3179,17 @@ export default function AttendantDashboard() {
             </button>
           )}
           <button
+            onClick={() => {
+              const c = contactsDB.find(x => normalizeDbPhone(x.phone_number) === normalizeDbPhone(contextMenu.phoneNumber));
+              if (c) handleEditContact(c);
+              closeContextMenu();
+            }}
+            className="w-full px-4 py-2.5 text-left hover:bg-slate-50 transition-colors flex items-center gap-3 text-slate-700"
+          >
+            <Edit2 className="w-4 h-4" />
+            Editar nome
+          </button>
+          <button
             onClick={() => handleContextMenuTag(contextMenu.phoneNumber)}
             className="w-full px-4 py-2.5 text-left hover:bg-slate-50 transition-colors flex items-center gap-3 text-slate-700"
           >
@@ -3262,6 +3205,75 @@ export default function AttendantDashboard() {
           </button>
         </div>
       )}
+
+      {/* Modal: Editar Contato (global) */}
+      {isEditModalOpen && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
+            <div className="bg-gradient-to-r from-blue-500 to-blue-600 px-6 py-5 text-white">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center">
+                    <Edit2 className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-bold">Editar Contato</h3>
+                    <p className="text-blue-100 text-xs">Atualize nome ou número</p>
+                  </div>
+                </div>
+                <button onClick={handleCloseEditModal} className="w-8 h-8 flex items-center justify-center rounded-full bg-white/10 hover:bg-white/20 text-white transition-all">
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-1.5">Nome</label>
+                <input
+                  type="text"
+                  value={editingName}
+                  onChange={e => setEditingName(e.target.value)}
+                  placeholder="Nome do contato"
+                  className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 transition-all bg-slate-50 focus:bg-white"
+                  autoFocus
+                  onKeyDown={e => e.key === 'Enter' && handleSaveContactEdit()}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-1.5">Número</label>
+                <div className="relative">
+                  <Phone className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                  <input
+                    type="text"
+                    value={editingPhone}
+                    onChange={e => setEditingPhone(e.target.value)}
+                    placeholder="Número do contato"
+                    className="w-full pl-10 pr-4 py-3 border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 transition-all bg-slate-50 focus:bg-white font-mono"
+                    onKeyDown={e => e.key === 'Enter' && handleSaveContactEdit()}
+                  />
+                </div>
+              </div>
+              <div className="flex gap-3 pt-2">
+                <button onClick={handleCloseEditModal} className="flex-1 px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl transition-all text-sm font-semibold">Cancelar</button>
+                <button onClick={handleSaveContactEdit} className="flex-1 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl transition-all text-sm font-semibold shadow-sm">Salvar alterações</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Excluir Contato (global) */}
+      <Modal
+        isOpen={deleteModal.isOpen}
+        onClose={handleCloseDeleteModal}
+        onConfirm={handleDeleteContact}
+        title="Excluir Contato"
+        message={`Tem certeza que deseja excluir o contato "${deleteModal.contact?.name}"?\n\nTodas as mensagens e dados serão removidos permanentemente. Esta ação não pode ser desfeita.`}
+        confirmText="Excluir"
+        cancelText="Cancelar"
+        confirmColor="red"
+        loading={isDeletingContact}
+      />
 
       {/* Toast de notificação */}
       {showToast && <Toast message={toastMessage} onClose={() => setShowToast(false)} />}
