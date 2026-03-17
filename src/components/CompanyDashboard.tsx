@@ -3134,19 +3134,19 @@ export default function CompanyDashboard() {
               )}
             </div>
 
-            {/* Botões buscar e adicionar contatos */}
-            <div className="px-3 pb-3 pt-2 border-t border-[#252b3b] bg-[#1a1f2e] flex justify-center gap-3">
+            {/* Botão buscar contatos */}
+            <div className="px-3 pb-3 pt-2 border-t border-[#252b3b] bg-[#1a1f2e] flex justify-center">
               <button
                 onClick={fetchWebhookContacts}
-                title="Buscar contatos"
-                className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-lg shadow-sm transition-all hover:scale-[1.02] active:scale-95"
+                title="Buscar contato"
+                className="flex items-center gap-2 px-5 py-2 bg-teal-500 hover:bg-teal-400 active:bg-teal-600 text-white text-sm font-semibold rounded-full shadow-lg shadow-teal-500/20 transition-all hover:scale-[1.03] active:scale-95"
               >
                 {loadingWebhookContacts ? (
                   <Loader2 className="w-4 h-4 animate-spin" />
                 ) : (
-                  <User className="w-4 h-4" />
+                  <Search className="w-4 h-4" />
                 )}
-                Nova Conversa
+                Buscar Contato
               </button>
             </div>
 
