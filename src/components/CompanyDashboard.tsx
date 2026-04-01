@@ -691,7 +691,7 @@ export default function CompanyDashboard() {
     } finally {
       setLoading(false);
     }
-  }, [company]);
+  }, [company, selectedContact]);
 
   const loadMoreMessages = useCallback(async () => {
     if (!hasMoreMessages || loadingMoreMessages || !selectedContact || !company) return;
@@ -1525,10 +1525,14 @@ export default function CompanyDashboard() {
     setSelectedContact(phoneNumber);
   };
 
-  const debouncedFetchMessagesAndContacts = useMemo(
-    () => debounce(() => { fetchMessages(); fetchContacts(); }, 300),
-    [fetchMessages, fetchContacts]
-  );
+  const fetchMessagesRef = useRef(fetchMessages);
+  const fetchContactsRef = useRef(fetchContacts);
+  useEffect(() => { fetchMessagesRef.current = fetchMessages; }, [fetchMessages]);
+  useEffect(() => { fetchContactsRef.current = fetchContacts; }, [fetchContacts]);
+
+  const debouncedFetchMessagesAndContacts = useRef(
+    debounce(() => { fetchMessagesRef.current(); fetchContactsRef.current(); }, 300)
+  ).current;
 
   useEffect(() => {
     fetchMessages();
@@ -1597,7 +1601,7 @@ export default function CompanyDashboard() {
       supabase.removeChannel(channel);
       debouncedFetchMessagesAndContacts.cancel();
     };
-  }, [company?.api_key, fetchMessages, debouncedFetchMessagesAndContacts]);
+  }, [company?.api_key]);
 
   // Hook para monitorar mudanças em tempo real nas mensagens
   // Hook para monitorar mudanças em tempo real nas mensagens
