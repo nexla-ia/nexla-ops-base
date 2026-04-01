@@ -1840,8 +1840,8 @@ export default function AttendantDashboard() {
 
       const deletedPhone = phone_number;
       const phoneDigits = deletedPhone.replace(/\D/g, '');
-      await supabase.from('messages').delete().or(`numero.eq.${deletedPhone},numero.eq.${phoneDigits},numero.eq.${deletedPhone}@s.whatsapp.net`);
-      await supabase.from('sent_messages').delete().or(`numero.eq.${deletedPhone},numero.eq.${phoneDigits}`);
+      await supabase.from('messages').delete().eq('company_id', attendant.company_id).or(`numero.eq.${deletedPhone},numero.eq.${phoneDigits},numero.eq.${deletedPhone}@s.whatsapp.net`);
+      await supabase.from('sent_messages').delete().eq('company_id', attendant.company_id).or(`numero.eq.${deletedPhone},numero.eq.${phoneDigits}`);
 
       setAllContactsList(prev => prev.filter(c => c.phone_number !== deletedPhone && c.id !== contactId));
       setContactsDB(prev => prev.filter(c => c.phone_number !== deletedPhone && c.id !== contactId));

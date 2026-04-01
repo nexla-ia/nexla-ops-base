@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import debounce from 'lodash/debounce';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { supabase, Message } from '../lib/supabase';
@@ -596,6 +597,13 @@ export default function CompanyDashboard() {
     const effectiveLimit = limit || 150;
 
     try {
+      // Sem contato selecionado não há o que buscar
+      if (!selectedContact) {
+        clearTimeout(timeout);
+        setLoading(false);
+        return;
+      }
+
       // Incluir fallback por company_id caso mensagens não possuam apikey_instancia
       let messagesQuery = company?.id
         ? supabase.from('messages').select('*').or(`apikey_instancia.eq.${company.api_key},company_id.eq.${company.id}`)
@@ -604,6 +612,10 @@ export default function CompanyDashboard() {
       let sentMessagesQuery = company?.id
         ? supabase.from('sent_messages').select('*').or(`apikey_instancia.eq.${company.api_key},company_id.eq.${company.id}`)
         : supabase.from('sent_messages').select('*').eq('apikey_instancia', company.api_key);
+
+      // Filtrar pelo contato aberto na tela
+      messagesQuery = messagesQuery.eq('numero', selectedContact);
+      sentMessagesQuery = sentMessagesQuery.eq('numero', selectedContact);
 
       messagesQuery = messagesQuery.order('created_at', { ascending: false }).limit(effectiveLimit);
       sentMessagesQuery = sentMessagesQuery.order('created_at', { ascending: false }).limit(effectiveLimit);
@@ -1513,6 +1525,11 @@ export default function CompanyDashboard() {
     setSelectedContact(phoneNumber);
   };
 
+  const debouncedFetchMessagesAndContacts = useMemo(
+    () => debounce(() => { fetchMessages(); fetchContacts(); }, 300),
+    [fetchMessages, fetchContacts]
+  );
+
   useEffect(() => {
     fetchMessages();
     fetchContacts();
@@ -1538,10 +1555,7 @@ export default function CompanyDashboard() {
           table: 'messages',
           filter: `apikey_instancia=eq.${company.api_key}`,
         },
-        () => {
-          fetchMessages();
-          fetchContacts();
-        }
+        () => { debouncedFetchMessagesAndContacts(); }
       )
       .on(
         'postgres_changes',
@@ -1551,10 +1565,7 @@ export default function CompanyDashboard() {
           table: 'sent_messages',
           filter: `apikey_instancia=eq.${company.api_key}`,
         },
-        () => {
-          fetchMessages();
-          fetchContacts();
-        }
+        () => { debouncedFetchMessagesAndContacts(); }
       )
       .on(
         'postgres_changes',
@@ -1584,8 +1595,9 @@ export default function CompanyDashboard() {
 
     return () => {
       supabase.removeChannel(channel);
+      debouncedFetchMessagesAndContacts.cancel();
     };
-  }, [company?.api_key, fetchMessages]);
+  }, [company?.api_key, fetchMessages, debouncedFetchMessagesAndContacts]);
 
   // Hook para monitorar mudanças em tempo real nas mensagens
   // Hook para monitorar mudanças em tempo real nas mensagens
@@ -1701,23 +1713,6 @@ export default function CompanyDashboard() {
 
 
 
-  // Polling automático como fallback - verifica a cada 3 segundos
-  useEffect(() => {
-    if (activeTab !== 'mensagens' || !company?.api_key) return;
-
-    console.log('⏱️ Iniciando polling de mensagens a cada 3 segundos');
-
-    const pollingInterval = setInterval(() => {
-      console.log('🔄 Verificando novas mensagens...');
-      fetchMessages();
-      fetchContacts();
-    }, 3000); // 3 segundos
-
-    return () => {
-      clearInterval(pollingInterval);
-      console.log('⏹️ Parando polling de mensagens');
-    };
-  }, [activeTab, company?.api_key, fetchMessages]);
 
   const startConversationFromContact = async (wc: { name: string; phone: string }) => {
     if (!company?.id || !wc.phone) return;
